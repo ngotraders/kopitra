@@ -42,6 +42,37 @@ components:
       schema:
         type: string
         example: "Wed, 21 Oct 2015 07:28:00 GMT"
+
+  schemas:
+    PublisherSettings:
+      type: object
+      properties:
+        percentage:
+          type: number
+          format: double
+          description: Percentage of account equity to be used.
+        leverage:
+          type: number
+          description: The leverage setting for trades.
+    SubscriberSettings:
+      type: object
+      properties:
+        followStrategy:
+          type: string
+          enum: [FIXED_BALANCE_RATIO, FOLLOW_PUBLISHER, FIXED_LOT]
+          description: Strategy for following the Publisher.
+        strategyParameters:
+          type: object
+          properties:
+            balanceRatio:
+              type: number
+              format: double
+              description: Balance ratio for the FIXED_BALANCE_RATIO and FOLLOW_PUBLISHER strategies.
+            fixedLot:
+              type: number
+              format: double
+              description: Fixed lot size for the FIXED_LOT strategy.
+
 paths:
   /session:
     post:
@@ -70,7 +101,7 @@ paths:
   /config:
     get:
       summary: Retrieve client configuration settings.
-      description: Fetches the current configuration settings for the authenticated EA client. This endpoint should be called with a valid session token.
+      description: Fetches the current configuration settings for the authenticated EA client. This endpoint should be called with a valid session token. The configuration includes the role of the EA (Publisher or Subscriber) and relevant settings.
       operationId: getConfig
       parameters:
         - $ref: "#/components/parameters/X-EA-Key"
@@ -86,24 +117,48 @@ paths:
             application/json:
               schema:
                 type: object
-                required:
-                  - riskManagement
-                  - tradeParameters
                 properties:
-                  riskManagement:
+                  role:
+                    type: string
+                    enum: [PUBLISHER, SUBSCRIBER]
+                  settings:
                     type: object
-                    properties:
-                      maxDrawdown:
-                        type: number
-                        format: double
-                        description: The maximum allowed drawdown percentage.
-                  tradeParameters:
-                    type: object
-                    properties:
-                      maxTradeVolume:
-                        type: number
-                        format: double
-                        description: The maximum trade volume allowed.
+                    oneOf:
+                      - $ref: "#/components/schemas/PublisherSettings"
+                      - $ref: "#/components/schemas/SubscriberSettings"
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+    post:
+      summary: Update client configuration settings.
+      description: Updates the configuration settings for the authenticated EA client. This allows EAs to adjust their operation mode and settings.
+      operationId: updateConfig
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [PUBLISHER, SUBSCRIBER]
+                settings:
+                  type: object
+                  oneOf:
+                    - $ref: "#/components/schemas/PublisherSettings"
+                    - $ref: "#/components/schemas/SubscriberSettings"
+      responses:
+        "200":
+          description: Configuration settings updated successfully.
+        "400":
+          description: Bad request. The request is malformed or missing required information.
         "401":
           description: Unauthorized. Session token is invalid or expired.
         "503":
@@ -243,7 +298,7 @@ paths:
                   type: number
                   format: double
                 leverage:
-                  type: string
+                  type: number
                 performanceMetrics:
                   type: object
                   properties:
