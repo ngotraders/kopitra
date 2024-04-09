@@ -1,0 +1,370 @@
+openapi: 3.0.0
+info:
+  title: EA Interaction API
+  version: "1.0"
+  description: API for facilitating communication between the EA (Expert Advisor) and the server, including status updates, log collection, and message notifications.
+servers:
+  - url: https://example.com/api/ea
+
+components:
+  parameters:
+    X-EA-Key:
+      in: header
+      name: X-EA-Key
+      required: true
+      schema:
+        type: string
+      description: Unique identifier for the EA.
+    X-EA-Version:
+      in: header
+      name: X-EA-Version
+      required: true
+      schema:
+        type: string
+      description: Version of the EA.
+    SessionToken:
+      in: header
+      name: Authorization
+      required: true
+      schema:
+        type: string
+        example: "Bearer YOUR_SESSION_TOKEN"
+      description: Session token for authenticated communication.
+  headers:
+    Last-Modified:
+      description: The timestamp when the messages information was last updated.
+      schema:
+        type: string
+        format: date-time
+        example: "Wed, 21 Oct 2015 07:28:00 GMT"
+    X-Config-Last-Modified:
+      description: Indicates the last update time of the client configuration in UTC. Used by the client to determine if a new configuration needs to be fetched.
+      schema:
+        type: string
+        example: "Wed, 21 Oct 2015 07:28:00 GMT"
+paths:
+  /session:
+    post:
+      summary: Authenticate the EA with a unique EA key and return a session token.
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+      responses:
+        "200":
+          description: EA authenticated successfully. Session token returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionToken:
+                    type: string
+                    description: The session token to be used for subsequent authentications.
+                  expiresIn:
+                    type: integer
+                    format: int64
+                    description: The expiration time of the session token in seconds.
+        "401":
+          description: Unauthorized. The provided EA key is invalid.
+
+  /config:
+    get:
+      summary: Retrieve client configuration settings.
+      description: Fetches the current configuration settings for the authenticated EA client. This endpoint should be called with a valid session token.
+      operationId: getConfig
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Configuration settings retrieved successfully.
+          headers:
+            Last-Modified:
+              $ref: "#/components/headers/Last-Modified"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - riskManagement
+                  - tradeParameters
+                properties:
+                  riskManagement:
+                    type: object
+                    properties:
+                      maxDrawdown:
+                        type: number
+                        format: double
+                        description: The maximum allowed drawdown percentage.
+                  tradeParameters:
+                    type: object
+                    properties:
+                      maxTradeVolume:
+                        type: number
+                        format: double
+                        description: The maximum trade volume allowed.
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+  /positions:
+    post:
+      summary: Send current positions held by the EA.
+      description: >
+        Submits the current positions held by the EA whenever there's a change in the EA's positions.
+        The request includes details such as ticket number, symbol, order type, transaction start time,
+        and execution price.
+      operationId: sendPositions
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                positions:
+                  type: array
+                  items:
+                    type: object
+                    required: [ticketNo, symbol, orderType, time, price]
+                    properties:
+                      ticketNo:
+                        type: integer
+                        description: Unique ticket number for the position.
+                      symbol:
+                        type: string
+                        description: Trading symbol for the position.
+                        example: USDJPY
+                      orderType:
+                        type: string
+                        enum: [BUY, SELL]
+                        description: Order type, either BUY or SELL.
+                      time:
+                        type: string
+                        format: date-time
+                        description: Transaction start time.
+                      price:
+                        type: number
+                        format: double
+                        description: Execution price at the start of the transaction.
+      responses:
+        "200":
+          description: Positions successfully received and processed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Positions successfully updated."
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+    get:
+      summary: Retrieve all positions currently held by the EA.
+      description: Fetches a list of all current positions held by the authenticated EA client, including details such as ticket number, symbol, order type, and execution price. The Last-Modified header indicates when the position information was last updated.
+      operationId: getPositions
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Successfully retrieved the list of positions.
+          headers:
+            Last-Modified:
+              description: The timestamp when the positions information was last updated.
+              schema:
+                type: string
+                format: date-time
+                example: "Wed, 21 Oct 2015 07:28:00 GMT"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required: [ticketNo, symbol, orderType, time, price]
+                      properties:
+                        ticketNo:
+                          type: integer
+                          description: Unique ticket number for the position.
+                        symbol:
+                          type: string
+                          description: Trading symbol for the position.
+                          example: USDJPY
+                        orderType:
+                          type: string
+                          enum: [BUY, SELL]
+                          description: Order type, either BUY or SELL.
+                        time:
+                          type: string
+                          format: date-time
+                          description: Transaction start time.
+                        price:
+                          type: number
+                          format: double
+                          description: Execution price at the start of the transaction.
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable. The server is currently unable to handle the request due to temporary overloading or maintenance of the server.
+
+  /status:
+    post:
+      summary: Send the current status and performance metrics of the EA.
+      operationId: sendStatus
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                autoTradingEnabled:
+                  type: boolean
+                accountBalance:
+                  type: number
+                  format: double
+                leverage:
+                  type: string
+                performanceMetrics:
+                  type: object
+                  properties:
+                    executionTime:
+                      type: number
+                    successfulRequests:
+                      type: integer
+                    failedRequests:
+                      type: integer
+                    averageRequestTime:
+                      type: number
+                      format: double
+                    orderAttempts:
+                      type: integer
+                    ordersExecuted:
+                      type: integer
+      responses:
+        "200":
+          description: EA status successfully received and processed.
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+  /messages:
+    get:
+      summary: Retrieve notifications from the server.
+      operationId: getMessages
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      responses:
+        "200":
+          description: Successfully retrieved the notifications.
+          headers:
+            X-Config-Last-Modified:
+              $ref: "#/components/headers/X-Config-Last-Modified"
+            Last-Modified:
+              $ref: "#/components/headers/Last-Modified"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        messageId:
+                          type: string
+                        messageType:
+                          type: string
+                        messageContent:
+                          type: string
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+  /messages/acknowledge:
+    post:
+      summary: Acknowledge the receipt of a message by EA.
+      operationId: acknowledgeMessage
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+        - $ref: "#/components/parameters/SessionToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messageIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Message acknowledgement successfully received.
+        "400":
+          description: Bad request.
+        "401":
+          description: Unauthorized. Session token is invalid or expired.
+        "503":
+          description: Service Unavailable.
+
+  /logs:
+    post:
+      summary: Collect logs from EA.
+      operationId: collectLogs
+      tags:
+        - Logs
+      parameters:
+        - $ref: "#/components/parameters/X-EA-Key"
+        - $ref: "#/components/parameters/X-EA-Version"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                logType:
+                  type: string
+                  enum: [error, warning, info]
+                message:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+                additionalInfo:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Log data successfully received.
+        "400":
+          description: Bad request.
+        "503":
+          description: Service Unavailable.
