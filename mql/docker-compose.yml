@@ -1,0 +1,9 @@
+services:
+  desktop:
+    build:
+      context: ./docker
+    volumes:
+      - ./docker/home:/root
+    ports:
+      - 5900:5900
+      - 6080:6080
