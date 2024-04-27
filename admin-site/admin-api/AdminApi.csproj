@@ -8,6 +8,7 @@
     <RootNamespace>AdminApi</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="EventFlow" Version="1.0.5003-alpha" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.6.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.0.12" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.7.0-preview2" />
