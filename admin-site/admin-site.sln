@@ -5,7 +5,9 @@ VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "website", "WebSite\website.esproj", "{9BFFC9D1-B10F-4345-AF7F-19597FB70710}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "admin-api", "admin-api\admin-api.csproj", "{F4A3E3CD-CA5D-430D-9D18-17E17F142B24}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AdminApi", "admin-api\AdminApi.csproj", "{F4A3E3CD-CA5D-430D-9D18-17E17F142B24}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminApi.Tests", "admin-api-test\AdminApi.Tests.csproj", "{AB605C3B-3EF4-4545-9173-62EB947A2F82}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,6 +25,10 @@ Global
 		{F4A3E3CD-CA5D-430D-9D18-17E17F142B24}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4A3E3CD-CA5D-430D-9D18-17E17F142B24}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4A3E3CD-CA5D-430D-9D18-17E17F142B24}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB605C3B-3EF4-4545-9173-62EB947A2F82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB605C3B-3EF4-4545-9173-62EB947A2F82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB605C3B-3EF4-4545-9173-62EB947A2F82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB605C3B-3EF4-4545-9173-62EB947A2F82}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
