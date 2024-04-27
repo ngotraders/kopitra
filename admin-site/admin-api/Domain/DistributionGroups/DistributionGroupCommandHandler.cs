@@ -4,14 +4,23 @@ using EventFlow.Commands;
 namespace AdminApi.Domain.DistributionGroups
 {
     public class DistributionGroupCommandHandler :
-        CommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupCommand>
+        ICommandHandler<IdRegistryAggregate, DistributionGroupId, IExecutionResult, DistributionGroupCreateCommand>,
+        ICommandHandler<IdRegistryAggregate, DistributionGroupId, IExecutionResult, DistributionGroupUpdateCommand>,
+        ICommandHandler<IdRegistryAggregate, DistributionGroupId, IExecutionResult, DistributionGroupDeleteCommand>
     {
-        public override Task<IExecutionResult> ExecuteCommandAsync(
-            DistributionGroupAggregate aggregate,
-            DistributionGroupCommand command,
-            CancellationToken cancellationToken)
+        public Task<IExecutionResult> ExecuteCommandAsync(IdRegistryAggregate aggregate, DistributionGroupCreateCommand command, CancellationToken cancellationToken)
         {
-            var executionResult = aggregate.SetMagicNumer(command.MagicNumber);
+            var executionResult = aggregate.SetName(command.Name);
+            return Task.FromResult(executionResult);
+        }
+        public Task<IExecutionResult> ExecuteCommandAsync(IdRegistryAggregate aggregate, DistributionGroupUpdateCommand command, CancellationToken cancellationToken)
+        {
+            var executionResult = aggregate.SetName(command.Name);
+            return Task.FromResult(executionResult);
+        }
+        public Task<IExecutionResult> ExecuteCommandAsync(IdRegistryAggregate aggregate, DistributionGroupDeleteCommand command, CancellationToken cancellationToken)
+        {
+            var executionResult = aggregate.Delete();
             return Task.FromResult(executionResult);
         }
     }

@@ -1,7 +1,6 @@
-using EventFlow.Queries;
-using EventFlow;
 using AdminApi.Domain.DistributionGroups;
-using EventFlow.Extensions;
+using EventFlow;
+using EventFlow.Queries;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AdminApi
@@ -14,40 +13,50 @@ namespace AdminApi
         {
             using var services = new ServiceCollection()
                 .AddLogging()
-                .AddEventFlow(options =>
-                {
-                    options.AddEvents([typeof(DistributionGroupEvent)])
-                           .AddCommands([typeof(DistributionGroupCommand)])
-                           .AddCommandHandlers([typeof(DistributionGroupCommandHandler)])
-                           .UseInMemoryReadStoreFor<DistributionGroupReadModel>();
-                })
+                .AddAdminApiDomain()
                 .BuildServiceProvider();
 
-            // Create a new identity for our aggregate root
             var id = DistributionGroupId.New;
 
-            // Define some important value
-            const int magicNumber = 42;
+            const string name = "TestName";
 
-            // Resolve the command bus and use it to publish a command
             var commandBus = services.GetService<ICommandBus>()!;
-            var command = new DistributionGroupCommand(id, magicNumber);
+            var command = new DistributionGroupCreateCommand(id, name);
             var executionResult = await commandBus.PublishAsync(command, CancellationToken.None)
                 .ConfigureAwait(false);
 
-            // Verify that we didn't trigger our domain validation
             Assert.AreEqual(true, executionResult.IsSuccess);
 
-            // Resolve the query handler and use the built-in query for fetching
-            // read models by identity to get our read model representing the
-            // state of our aggregate root
             var queryProcessor = services.GetService<IQueryProcessor>()!;
             var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
             var exampleReadModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
                 .ConfigureAwait(false);
 
-            // Verify that the read model has the expected magic number
-            Assert.AreEqual(42, exampleReadModel.MagicNumber);
+            Assert.AreEqual(name, exampleReadModel.Name);
+
+            var command2 = new DistributionGroupUpdateCommand(id, @"New${name}");
+            var executionResult2 = await commandBus.PublishAsync(command2, CancellationToken.None)
+                .ConfigureAwait(false);
+            
+            Assert.AreEqual(true, executionResult2.IsSuccess);
+
+            var query2 = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
+            var exampleReadModel2 = await queryProcessor.ProcessAsync(query2, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(@"New${name}", exampleReadModel2.Name);
+
+            var command3 = new DistributionGroupDeleteCommand(id);
+            var executionResult3 = await commandBus.PublishAsync(command3, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(true, executionResult3.IsSuccess);
+
+            var query3 = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
+            var exampleReadModel3 = await queryProcessor.ProcessAsync(query2, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            Assert.IsNull(exampleReadModel3);
         }
     }
 }

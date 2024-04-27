@@ -5,13 +5,20 @@ namespace AdminApi.Domain.DistributionGroups
 {
     public class DistributionGroupReadModel :
        IReadModel,
-       IAmReadModelFor<DistributionGroupAggregate, DistributionGroupId, DistributionGroupEvent>
+       IAmReadModelFor<IdRegistryAggregate, DistributionGroupId, DistributionGroupUpdatedEvent>,
+       IAmReadModelFor<IdRegistryAggregate, DistributionGroupId, DistributionGroupDeletedEvent>
     {
-        public int MagicNumber { get; private set; }
+        public string Name { get; private set; } = string.Empty;
 
-        public Task ApplyAsync(IReadModelContext context, IDomainEvent<DistributionGroupAggregate, DistributionGroupId, DistributionGroupEvent> domainEvent, CancellationToken cancellationToken)
+        public Task ApplyAsync(IReadModelContext context, IDomainEvent<IdRegistryAggregate, DistributionGroupId, DistributionGroupUpdatedEvent> domainEvent, CancellationToken cancellationToken)
         {
-            MagicNumber = domainEvent.AggregateEvent.MagicNumber;
+            Name = domainEvent.AggregateEvent.Name;
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyAsync(IReadModelContext context, IDomainEvent<IdRegistryAggregate, DistributionGroupId, DistributionGroupDeletedEvent> domainEvent, CancellationToken cancellationToken)
+        {
+            context.MarkForDeletion();
             return Task.CompletedTask;
         }
     }

@@ -1,29 +1,65 @@
-﻿using EventFlow.Aggregates.ExecutionResults;
-using EventFlow.Aggregates;
+﻿using EventFlow.Aggregates;
+using EventFlow.Aggregates.ExecutionResults;
+using EventFlow.Snapshots;
+using EventFlow.Snapshots.Strategies;
 
 namespace AdminApi.Domain.DistributionGroups
 {
-    public class DistributionGroupAggregate :
-        AggregateRoot<DistributionGroupAggregate, DistributionGroupId>,
-        IEmit<DistributionGroupEvent>
+    public class IdRegistryAggregate :
+        SnapshotAggregateRoot<IdRegistryAggregate, DistributionGroupId, DistributionGroupSnapshot>,
+        IEmit<DistributionGroupUpdatedEvent>,
+        IEmit<DistributionGroupDeletedEvent>
     {
-        private int? _magicNumber;
+        public const int SnapshotEveryVersion = 10;
 
-        public DistributionGroupAggregate(DistributionGroupId id) : base(id) { }
+        private string? _name;
+        private bool _isDeleted;
 
-        public IExecutionResult SetMagicNumer(int magicNumber)
+        public IdRegistryAggregate(DistributionGroupId id)
+            : base(id, SnapshotEveryFewVersionsStrategy.With(SnapshotEveryVersion))
         {
-            if (_magicNumber.HasValue)
-                return ExecutionResult.Failed("Magic number already set");
+        }
 
-            Emit(new DistributionGroupEvent(magicNumber));
+
+        public IExecutionResult SetName(string name)
+        {
+            if (name == _name)
+                return ExecutionResult.Success();
+
+            Emit(new DistributionGroupUpdatedEvent(name));
 
             return ExecutionResult.Success();
         }
 
-        public void Apply(DistributionGroupEvent aggregateEvent)
+        public IExecutionResult Delete()
         {
-            _magicNumber = aggregateEvent.MagicNumber;
+            if (_isDeleted)
+                return ExecutionResult.Failed("This aggregate has already deleted.");
+
+            Emit(new DistributionGroupDeletedEvent());
+
+            return ExecutionResult.Success();
+        }
+
+        public void Apply(DistributionGroupUpdatedEvent aggregateEvent)
+        {
+            _name = aggregateEvent.Name;
+        }
+
+        public void Apply(DistributionGroupDeletedEvent aggregateEvent)
+        {
+            _isDeleted = true;
+        }
+
+        protected override Task<DistributionGroupSnapshot> CreateSnapshotAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new DistributionGroupSnapshot(_name!));
+        }
+
+        protected override Task LoadSnapshotAsync(DistributionGroupSnapshot snapshot, ISnapshotMetadata metadata, CancellationToken cancellationToken)
+        {
+            _name = snapshot.Name;
+            return Task.CompletedTask;
         }
     }
 }
