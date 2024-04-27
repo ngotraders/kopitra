@@ -13,6 +13,7 @@ namespace AdminApi
             return services.AddEventFlow(options =>
             {
                 options.AddDistributionGroups()
+                       .AddIdRegistries()
                        .UseInMemorySnapshotPersistence();
             });
         }

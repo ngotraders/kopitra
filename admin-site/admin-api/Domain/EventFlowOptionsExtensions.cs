@@ -7,6 +7,15 @@ namespace AdminApi.Domain
 {
     public static class EventFlowOptionsExtensions
     {
+        public static IEventFlowOptions AddIdRegistries(this IEventFlowOptions options)
+        {
+            return options.AddEvents(new[] { typeof(IdRegistryKeyIdPairAddedEvent), typeof(IdRegistryKeyIdPairRemovedEvent) })
+                          .AddCommands(new[] { typeof(IdRegistryRegisterKeyCommand) })
+                          .AddCommandHandlers(new[] { typeof(IdRegistryCommandHandler) })
+                          .AddSnapshots(new[] { typeof(IdRegistrySnapshot) })
+                          .UseInMemoryReadStoreFor<IdRegistryReadModel>();
+        }
+
         public static IEventFlowOptions AddDistributionGroups(this IEventFlowOptions options)
         {
             return options.AddEvents(new[] { typeof(DistributionGroupUpdatedEvent), typeof(DistributionGroupDeletedEvent) })
