@@ -1,2 +1,3 @@
 .vscode/
-mql/docker/home/
+/mql/docker/home/
+/admin-site/.vs/
