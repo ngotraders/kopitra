@@ -5,22 +5,34 @@ use ntex::util::Bytes;
 use ntex::web;
 use utoipa::OpenApi;
 
+use super::messages::{GetMessagesResponse, Message, PostMessagesRequest};
+use super::session::{
+    CopyTradeCloseOrder, CopyTradeOpenOrder, Position, RevokeSessionRequest, StartSessionResponse,
+};
 use crate::error::HttpError;
-use crate::models::todo::{Todo, TodoPartial};
 
-use super::todo;
+use super::messages;
+use super::session;
 
 /// Main structure to generate OpenAPI documentation
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        todo::get_todos,
-        todo::create_todo,
-        todo::get_todo,
-        todo::update_todo,
-        todo::delete_todo,
+        session::start_session,
+        session::revoke_session,
+        messages::get_messages,
+        messages::post_messages,
     ),
-    components(schemas(Todo, TodoPartial, HttpError))
+    components(schemas(
+        Position,
+        CopyTradeOpenOrder,
+        CopyTradeCloseOrder,
+        StartSessionResponse,
+        RevokeSessionRequest,
+        Message,
+        GetMessagesResponse,
+        PostMessagesRequest
+    ))
 )]
 pub(crate) struct ApiDoc;
 
