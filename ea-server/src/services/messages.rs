@@ -31,13 +31,15 @@ pub struct PostMessagesRequest {
   params(
     ("X-Ea-Key" = String, Header, description = "Identification key for the trading account"),
     ("X-Ea-Version" = String, Header, description = "EA version"),
-    ("Authorization" = String, Header, description = "Bearer with session token"),
   ),
   responses(
     (status = 200, description = "Session created", body = GetMessagesResponse),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
+  security(
+      ("session_token" = [])
+  )
 )]
 #[web::get("/messages")]
 pub async fn get_messages() -> web::HttpResponse {
@@ -52,13 +54,15 @@ pub async fn get_messages() -> web::HttpResponse {
   params(
     ("X-Ea-Key" = String, Header, description = "Identification key for the trading account"),
     ("X-Ea-Version" = String, Header, description = "EA version"),
-    ("Authorization" = String, Header, description = "Bearer with session token"),
   ),
   responses(
     (status = 200, description = "Session revoked"),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
+  security(
+      ("session_token" = [])
+  )
 )]
 #[web::post("/messages")]
 pub async fn post_messages() -> web::HttpResponse {

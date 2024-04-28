@@ -90,13 +90,15 @@ pub async fn start_session() -> web::HttpResponse {
   params(
     ("X-Ea-Key" = String, Header, description = "Identification key for the trading account"),
     ("X-Ea-Version" = String, Header, description = "EA version"),
-    ("Authorization" = String, Header, description = "Bearer with session token"),
   ),
   responses(
     (status = 200, description = "Session revoked"),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
+  security(
+      ("session_token" = [])
+  )
 )]
 #[web::post("/session/revoke")]
 pub async fn revoke_session() -> web::HttpResponse {

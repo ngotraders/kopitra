@@ -3,7 +3,8 @@ use std::sync::Arc;
 use ntex::http;
 use ntex::util::Bytes;
 use ntex::web;
-use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
 
 use super::messages::{GetMessagesResponse, Message, PostMessagesRequest};
 use super::session::{
@@ -17,24 +18,46 @@ use super::session;
 /// Main structure to generate OpenAPI documentation
 #[derive(OpenApi)]
 #[openapi(
+    info(title = "FX Copy Trading API",),
+    servers((url = "http://localhost:8080/api/ea/")),
     paths(
         session::start_session,
         session::revoke_session,
         messages::get_messages,
         messages::post_messages,
     ),
-    components(schemas(
-        Position,
-        CopyTradeOpenOrder,
-        CopyTradeCloseOrder,
-        StartSessionResponse,
-        RevokeSessionRequest,
-        Message,
-        GetMessagesResponse,
-        PostMessagesRequest
-    ))
+    components(
+        schemas(
+            Position,
+            CopyTradeOpenOrder,
+            CopyTradeCloseOrder,
+            StartSessionResponse,
+            RevokeSessionRequest,
+            Message,
+            GetMessagesResponse,
+            PostMessagesRequest
+        )
+    ),
+    modifiers(&SecurityAddon)
 )]
 pub(crate) struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap(); // we can unwrap safely since there already is components registered.
+        components.add_security_scheme(
+            "session_token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some("Bearer with session token"))
+                    .build(),
+            ),
+        )
+    }
+}
 
 #[web::get("/{tail}*")]
 async fn get_swagger(

@@ -10,8 +10,11 @@ async fn main() -> std::io::Result<()> {
             // Register swagger endpoints
             .configure(services::openapi::ntex_config)
             // Register other endpoints
-            .configure(services::session::ntex_config)
-            .configure(services::messages::ntex_config)
+            .service(
+                ntex::web::scope("/api/ea")
+                    .configure(services::session::ntex_config)
+                    .configure(services::messages::ntex_config),
+            )
             // Default endpoint for unregisterd endpoints
             .default_service(web::route().to(services::default))
     })
