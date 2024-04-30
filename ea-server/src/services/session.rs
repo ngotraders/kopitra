@@ -1,6 +1,22 @@
+use std::sync::Mutex;
+
 use ntex::web;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
+
+pub struct SessionState {
+    pub session_token: Mutex<Option<String>>,
+}
+
+impl SessionState {
+    pub fn update_session_token(&self, ea_key: String) -> String {
+        let mut session_token_guard = self.session_token.lock().unwrap();
+        let session_token = Uuid::new_v4();
+        *session_token_guard = Some(session_token.to_string());
+        session_token.to_string()
+    }
+}
 
 /// Position
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
@@ -78,8 +94,37 @@ pub struct RevokeSessionRequest {
   ),
 )]
 #[web::post("/session")]
-pub async fn start_session() -> web::HttpResponse {
-    web::HttpResponse::Ok().finish()
+pub async fn start_session(
+    req: web::HttpRequest,
+    state: web::types::State<SessionState>,
+) -> web::HttpResponse {
+    let ea_key: &str;
+    match req.headers().get("X-Ea-Key") {
+        None => return web::HttpResponse::BadRequest().finish(),
+        Some(value) => {
+            ea_key = value
+                .to_str()
+                .expect("X-Ea-Key cannot be handled as string")
+        }
+    };
+    let ea_version: &str;
+    match req.headers().get("X-Ea-Version") {
+        None => return web::HttpResponse::BadRequest().finish(),
+        Some(value) => {
+            ea_version = value
+                .to_str()
+                .expect("X-Ea-Version cannot be handled as string")
+        }
+    };
+    let session_token = state.update_session_token(ea_key.to_string());
+
+    web::HttpResponse::Ok().json(&StartSessionResponse {
+        token: session_token,
+        role: None,
+        positions: [].to_vec(),
+        pending_order_open: [].to_vec(),
+        pending_order_close: [].to_vec(),
+    })
 }
 
 /// Revoke session
@@ -106,6 +151,9 @@ pub async fn revoke_session() -> web::HttpResponse {
 }
 
 pub fn ntex_config(cfg: &mut web::ServiceConfig) {
+    cfg.state(SessionState {
+        session_token: None.into(),
+    });
     cfg.service(start_session);
     cfg.service(revoke_session);
 }
