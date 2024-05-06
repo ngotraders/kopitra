@@ -7,7 +7,9 @@ namespace AdminApi.Domain.DistributionGroups
         ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupCreateCommand>,
         ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupDeleteCommand>,
         ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupUpdateCommand>,
-        ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupUpdateAdministratorsCommand>
+        ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupUpdateAdministratorsCommand>,
+        ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupAddAccountCommand>,
+        ICommandHandler<DistributionGroupAggregate, DistributionGroupId, IExecutionResult, DistributionGroupRemoveAccountCommand>
     {
         public Task<IExecutionResult> ExecuteCommandAsync(DistributionGroupAggregate aggregate, DistributionGroupCreateCommand command, CancellationToken cancellationToken)
         {
@@ -30,6 +32,18 @@ namespace AdminApi.Domain.DistributionGroups
         public Task<IExecutionResult> ExecuteCommandAsync(DistributionGroupAggregate aggregate, DistributionGroupUpdateAdministratorsCommand command, CancellationToken cancellationToken)
         {
             var executionResult = aggregate.SetAdministrators(command.Administrators);
+            return Task.FromResult(executionResult);
+        }
+
+        public Task<IExecutionResult> ExecuteCommandAsync(DistributionGroupAggregate aggregate, DistributionGroupAddAccountCommand command, CancellationToken cancellationToken)
+        {
+            var executionResult = aggregate.AddAccount(command.AccountId);
+            return Task.FromResult(executionResult);
+        }
+
+        public Task<IExecutionResult> ExecuteCommandAsync(DistributionGroupAggregate aggregate, DistributionGroupRemoveAccountCommand command, CancellationToken cancellationToken)
+        {
+            var executionResult = aggregate.RemoveAccount(command.AccountId);
             return Task.FromResult(executionResult);
         }
     }

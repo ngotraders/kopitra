@@ -10,12 +10,15 @@ namespace AdminApi.Domain.DistributionGroups
         IEmit<DistributionGroupUpdatedEvent>,
         IEmit<DistributionGroupDeletedEvent>,
         IEmit<DistributionGroupAdministratorAddedEvent>,
-        IEmit<DistributionGroupAdministratorRemovedEvent>
+        IEmit<DistributionGroupAdministratorRemovedEvent>,
+        IEmit<DistributionGroupAccountAddedEvent>,
+        IEmit<DistributionGroupAccountRemovedEvent>
     {
         public const int SnapshotEveryVersion = 10;
 
         private string? _name;
         private readonly List<UserId> _administrators = new();
+        private readonly List<AccountId> _accounts = new();
         private bool _isDeleted;
 
         public DistributionGroupAggregate(DistributionGroupId id)
@@ -50,6 +53,22 @@ namespace AdminApi.Domain.DistributionGroups
             return ExecutionResult.Success();
         }
 
+        public IExecutionResult AddAccount(AccountId accountId)
+        {
+            if (_accounts.Contains(accountId))
+                return ExecutionResult.Failed("このアカウントはすでに登録されています。");
+            Emit(new DistributionGroupAccountAddedEvent(accountId));
+            return ExecutionResult.Success();
+        }
+
+        public IExecutionResult RemoveAccount(AccountId accountId)
+        {
+            if (!_accounts.Contains(accountId))
+                return ExecutionResult.Failed("このアカウントはこの配信グループに所属していません。");
+            Emit(new DistributionGroupAccountRemovedEvent(accountId));
+            return ExecutionResult.Success();
+        }
+
         public IExecutionResult Delete()
         {
             if (_isDeleted)
@@ -78,6 +97,16 @@ namespace AdminApi.Domain.DistributionGroups
         public void Apply(DistributionGroupAdministratorRemovedEvent aggregateEvent)
         {
             _administrators.Remove(aggregateEvent.UserId);
+        }
+
+        public void Apply(DistributionGroupAccountAddedEvent aggregateEvent)
+        {
+            _accounts.Add(aggregateEvent.AccountId);
+        }
+
+        public void Apply(DistributionGroupAccountRemovedEvent aggregateEvent)
+        {
+            _accounts.Remove(aggregateEvent.AccountId);
         }
 
         protected override Task<DistributionGroupSnapshot> CreateSnapshotAsync(CancellationToken cancellationToken)

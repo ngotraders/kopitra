@@ -23,12 +23,17 @@ namespace AdminApi.Domain
                     typeof(DistributionGroupUpdatedEvent),
                     typeof(DistributionGroupDeletedEvent),
                     typeof(DistributionGroupAdministratorAddedEvent),
-                    typeof(DistributionGroupAdministratorRemovedEvent)
+                    typeof(DistributionGroupAdministratorRemovedEvent),
+                    typeof(DistributionGroupAccountAddedEvent),
+                    typeof(DistributionGroupAccountRemovedEvent),
                 })
                 .AddCommands(new[] {
                     typeof(DistributionGroupCreateCommand),
                     typeof(DistributionGroupUpdateCommand),
-                    typeof(DistributionGroupUpdateAdministratorsCommand)
+                    typeof(DistributionGroupDeleteCommand),
+                    typeof(DistributionGroupUpdateAdministratorsCommand),
+                    typeof(DistributionGroupAddAccountCommand),
+                    typeof(DistributionGroupRemoveAccountCommand),
                 })
                 .AddCommandHandlers(new[] { typeof(DistributionGroupCommandHandler) })
                 .AddSnapshots(new[] { typeof(DistributionGroupSnapshot) })

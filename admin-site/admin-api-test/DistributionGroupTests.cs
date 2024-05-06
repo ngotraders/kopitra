@@ -104,5 +104,51 @@ namespace AdminApi
                 CollectionAssert.AreEquivalent(new[] { userId2 }, readModel!.Administrators.ToList());
             }).ConfigureAwait(false);
         }
+
+        [TestMethod]
+        public async Task 配信グループにアカウントを追加する()
+        {
+            var id = DistributionGroupId.New;
+            const string name = "TestName";
+            var accountId = AccountId.New;
+
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
+
+            await ProcessCommandAsync(new DistributionGroupAddAccountCommand(id, accountId)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                CollectionAssert.AreEquivalent(new[] { accountId }, readModel!.Accounts.ToList());
+            }).ConfigureAwait(false);
+        }
+
+        [TestMethod]
+        public async Task 配信グループからアカウントを削除する()
+        {
+            var id = DistributionGroupId.New;
+            const string name = "TestName";
+            var accountId = AccountId.New;
+
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
+
+            await ProcessCommandAsync(new DistributionGroupAddAccountCommand(id, accountId)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                CollectionAssert.AreEquivalent(new[] { accountId }, readModel!.Accounts.ToList());
+            }).ConfigureAwait(false);
+
+            await ProcessCommandAsync(new DistributionGroupRemoveAccountCommand(id, accountId)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                Assert.AreEqual(0, readModel!.Accounts.Count);
+            }).ConfigureAwait(false);
+        }
     }
 }
