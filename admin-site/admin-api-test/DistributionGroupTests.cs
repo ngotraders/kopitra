@@ -1,226 +1,108 @@
 using AdminApi.Domain.DistributionGroups;
-using EventFlow;
 using EventFlow.Queries;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AdminApi
 {
     [TestClass]
-    public class DistributionGroupTests
+    public class DistributionGroupTests : EventFlowTestsBase
     {
-        private ServiceProvider? services;
-
-        [TestInitialize]
-        public void Initialize()
-        {
-            services = new ServiceCollection()
-                .AddLogging()
-                .AddAdminApiDomain()
-                .BuildServiceProvider();
-        }
-
-        [TestCleanup]
-        public void Cleanup()
-        {
-            services?.Dispose();
-        }
-
         [TestMethod]
         public async Task 配信グループを作成する()
         {
-            var commandBus = services!.GetService<ICommandBus>()!;
-            var queryProcessor = services!.GetService<IQueryProcessor>()!;
-
             var id = DistributionGroupId.New;
-
             const string name = "TestName";
 
-            var createCommand = new DistributionGroupCreateCommand(id, name);
-            var createResult = await commandBus.PublishAsync(createCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, createResult.IsSuccess);
-
-            var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-            var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(name, readModel.Name);
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
+            {
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
         }
 
         [TestMethod]
         public async Task 配信グループの名前を変更する()
         {
-            var commandBus = services!.GetService<ICommandBus>()!;
-            var queryProcessor = services!.GetService<IQueryProcessor>()!;
-
             var id = DistributionGroupId.New;
-
             const string name = "TestName";
 
-            var createCommand = new DistributionGroupCreateCommand(id, name);
-            var createResult = await commandBus.PublishAsync(createCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, createResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
-
-                Assert.AreEqual(name, readModel.Name);
-            }
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
 
             const string newName = @"New${name}";
-
-            var updateCommand = new DistributionGroupUpdateCommand(id, newName);
-            var updateResult = await commandBus.PublishAsync(updateCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, updateResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupUpdateCommand(id, newName)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
-
-                Assert.AreEqual(newName, readModel.Name);
-            }
+                Assert.AreEqual(newName, readModel!.Name);
+            }).ConfigureAwait(false);
         }
 
         [TestMethod]
         public async Task 配信グループを削除する()
         {
-            var commandBus = services!.GetService<ICommandBus>()!;
-            var queryProcessor = services!.GetService<IQueryProcessor>()!;
-
             var id = DistributionGroupId.New;
-
             const string name = "TestName";
 
-            var createCommand = new DistributionGroupCreateCommand(id, name);
-            var createResult = await commandBus.PublishAsync(createCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, createResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
 
-                Assert.AreEqual(name, readModel.Name);
-            }
-
-            var deleteCommand = new DistributionGroupDeleteCommand(id);
-            var deleteResult = await commandBus.PublishAsync(deleteCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, deleteResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupDeleteCommand(id)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
-
                 Assert.IsNull(readModel);
-            }
+            }).ConfigureAwait(false);
         }
 
         [TestMethod]
         public async Task 配信グループに管理者を追加する()
         {
-            var commandBus = services!.GetService<ICommandBus>()!;
-            var queryProcessor = services!.GetService<IQueryProcessor>()!;
-
             var id = DistributionGroupId.New;
+            const string name = "TestName";
             var userId = UserId.New;
 
-            const string name = "TestName";
-
-            var createCommand = new DistributionGroupCreateCommand(id, name);
-            var createResult = await commandBus.PublishAsync(createCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, createResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
 
-                Assert.AreEqual(name, readModel.Name);
-            }
-
-            var addAdminCommand = new DistributionGroupUpdateAdministratorsCommand(id, [userId]);
-            var addAdminResult = await commandBus.PublishAsync(addAdminCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, addAdminResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupUpdateAdministratorsCommand(id, [userId])).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
-
-                CollectionAssert.AreEquivalent(new[] { userId }, readModel.Administrators.ToList());
-            }
+                CollectionAssert.AreEquivalent(new[] { userId }, readModel!.Administrators.ToList());
+            }).ConfigureAwait(false);
         }
 
         [TestMethod]
         public async Task 配信グループに管理者を削除する()
         {
-            var commandBus = services!.GetService<ICommandBus>()!;
-            var queryProcessor = services!.GetService<IQueryProcessor>()!;
-
             var id = DistributionGroupId.New;
+            const string name = "TestName";
             var userId1 = UserId.New;
             var userId2 = UserId.New;
 
-            const string name = "TestName";
-
-            var createCommand = new DistributionGroupCreateCommand(id, name);
-            var createResult = await commandBus.PublishAsync(createCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, createResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupCreateCommand(id, name)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
+                Assert.AreEqual(name, readModel!.Name);
+            }).ConfigureAwait(false);
 
-                Assert.AreEqual(name, readModel.Name);
-            }
-
-            var addAdminsCommand = new DistributionGroupUpdateAdministratorsCommand(id, [userId1, userId2]);
-            var addAdminsResult = await commandBus.PublishAsync(addAdminsCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, addAdminsResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupUpdateAdministratorsCommand(id, [userId1, userId2])).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
+                CollectionAssert.AreEquivalent(new[] { userId1, userId2 }, readModel!.Administrators.ToList());
+            }).ConfigureAwait(false);
 
-                CollectionAssert.AreEquivalent(new[] { userId1, userId2 }, readModel.Administrators.ToList());
-            }
-
-            var removeAdminCommand = new DistributionGroupUpdateAdministratorsCommand(id, [userId2]);
-            var removeAdminResult = await commandBus.PublishAsync(removeAdminCommand, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, removeAdminResult.IsSuccess);
-
+            await ProcessCommandAsync(new DistributionGroupUpdateAdministratorsCommand(id, [userId2])).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<DistributionGroupReadModel>(id), readModel =>
             {
-                var query = new ReadModelByIdQuery<DistributionGroupReadModel>(id);
-                var readModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                    .ConfigureAwait(false);
-
-                CollectionAssert.AreEquivalent(new[] { userId2 }, readModel.Administrators.ToList());
-            }
+                CollectionAssert.AreEquivalent(new[] { userId2 }, readModel!.Administrators.ToList());
+            }).ConfigureAwait(false);
         }
     }
 }

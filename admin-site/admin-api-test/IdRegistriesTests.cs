@@ -1,46 +1,31 @@
 using EventFlow.Queries;
-using EventFlow;
 using AdminApi.Domain.IdRegistries;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AdminApi
 {
     [TestClass]
-    public class IdRegistriesTests
+    public class IdRegistriesTests : EventFlowTestsBase
     {
         [TestMethod]
-        public async Task TestMethod1()
+        public async Task IDを生成し破棄する()
         {
-            using var services = new ServiceCollection()
-                .AddLogging()
-                .AddAdminApiDomain()
-                .BuildServiceProvider();
-
             var id = IdRegistryId.New;
 
             const string key = "TestKey";
+            var generatedId = null as string;
 
-            var commandBus = services.GetService<ICommandBus>()!;
-            var command = new IdRegistryRegisterKeyCommand(id, key);
-            var executionResult = await commandBus.PublishAsync(command, CancellationToken.None)
-                .ConfigureAwait(false);
+            await ProcessCommandAsync(new IdRegistryRegisterKeyCommand(id, key)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<IdRegistryReadModel>(id), readModel =>
+            {
+                Assert.IsTrue(readModel!.Keys.TryGetValue(key, out generatedId));
+                Assert.AreEqual(key, readModel.Ids[generatedId]);
+            }).ConfigureAwait(false);
 
-            Assert.AreEqual(true, executionResult.IsSuccess);
-
-            var queryProcessor = services.GetService<IQueryProcessor>()!;
-            var query = new ReadModelByIdQuery<IdRegistryReadModel>(id);
-            var exampleReadModel = await queryProcessor.ProcessAsync(query, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(exampleReadModel.Keys.TryGetValue(key, out var generatedId));
-            Assert.AreEqual(key, exampleReadModel.Ids[generatedId]);
-
-
-            var command2 = new IdRegistryRemoveKeyCommand(id, key, generatedId);
-            var executionResult2 = await commandBus.PublishAsync(command2, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            Assert.AreEqual(true, executionResult2.IsSuccess);
+            await ProcessCommandAsync(new IdRegistryRemoveKeyCommand(id, key, generatedId!)).ConfigureAwait(false);
+            await AssertAsync(new ReadModelByIdQuery<IdRegistryReadModel>(id), readModel =>
+            {
+                Assert.IsFalse(readModel!.Keys.TryGetValue(key, out _));
+            }).ConfigureAwait(false);
         }
     }
 }
