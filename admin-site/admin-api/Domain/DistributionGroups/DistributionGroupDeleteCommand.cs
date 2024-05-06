@@ -4,7 +4,7 @@ using EventFlow.Commands;
 namespace AdminApi.Domain.DistributionGroups
 {
     public class DistributionGroupDeleteCommand :
-        Command<IdRegistryAggregate, DistributionGroupId, IExecutionResult>
+        Command<DistributionGroupAggregate, DistributionGroupId, IExecutionResult>
     {
         public DistributionGroupDeleteCommand(
             DistributionGroupId aggregateId)

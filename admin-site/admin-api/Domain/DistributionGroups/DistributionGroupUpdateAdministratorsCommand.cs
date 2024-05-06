@@ -3,17 +3,17 @@ using EventFlow.Commands;
 
 namespace AdminApi.Domain.DistributionGroups
 {
-    public class DistributionGroupCreateCommand :
+    public class DistributionGroupUpdateAdministratorsCommand :
         Command<DistributionGroupAggregate, DistributionGroupId, IExecutionResult>
     {
-        public DistributionGroupCreateCommand(
+        public DistributionGroupUpdateAdministratorsCommand(
             DistributionGroupId aggregateId,
-            string name)
+            ICollection<UserId> administrators)
             : base(aggregateId)
         {
-            Name = name;
+            Administrators = administrators;
         }
 
-        public string Name { get; }
+        public ICollection<UserId> Administrators { get; }
     }
 }

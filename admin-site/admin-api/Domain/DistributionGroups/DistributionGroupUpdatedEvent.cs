@@ -5,7 +5,7 @@ namespace AdminApi.Domain.DistributionGroups
 {
     [EventVersion("DistributionGroupUpdatedEvent", 1)]
     public class DistributionGroupUpdatedEvent :
-       AggregateEvent<IdRegistryAggregate, DistributionGroupId>
+       AggregateEvent<DistributionGroupAggregate, DistributionGroupId>
     {
         public DistributionGroupUpdatedEvent(string name)
         {
