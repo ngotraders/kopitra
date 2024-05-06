@@ -1,6 +1,7 @@
 import { Admin, Resource, ShowGuesser } from "react-admin";
 import { authProvider } from "./authProvider";
 import { dataProvider } from "./dataProvider";
+import { i18nProvider } from './i18nProvider';
 import { UserList } from "./users";
 import { PostCreate, PostEdit, PostList } from "./posts";
 import PostIcon from "@mui/icons-material/Book";
@@ -11,6 +12,7 @@ export const App = () => (
   <Admin
     authProvider={authProvider}
     dataProvider={dataProvider}
+    i18nProvider={i18nProvider}
     dashboard={Dashboard}
   >
     <Resource
