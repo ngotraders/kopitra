@@ -1,4 +1,3 @@
-use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet};
 
 use eventually::aggregate;
@@ -49,10 +48,11 @@ pub enum AccountEvent {
         id: AccountId,
         key: AccountKey,
     },
-    Activated {
+    Connected {
         id: AccountId,
+        ea_version: EaVersion,
     },
-    Deactivated {
+    Disconnected {
         id: AccountId,
     },
     PermissiveRolesChanged {
@@ -109,8 +109,8 @@ impl Message for AccountEvent {
     fn name(&self) -> &'static str {
         match self {
             AccountEvent::Created { .. } => "AccountEventCreated",
-            AccountEvent::Activated { .. } => "AccountEventActivated",
-            AccountEvent::Deactivated { .. } => "AccountEventDeactivated",
+            AccountEvent::Connected { .. } => "AccountEventConnected",
+            AccountEvent::Disconnected { .. } => "AccountEventDisconnected",
             AccountEvent::PermissiveRolesChanged { .. } => "AccountEventPermissiveRolesChanged",
             AccountEvent::BalanceChanged { .. } => "AccountEventBalanceChanged",
             AccountEvent::TradeOpened { .. } => "AccountEventTradeOpened",
@@ -131,6 +131,8 @@ pub enum AccountError {
     NotCreatedYet,
     #[error("account has already been created")]
     AlreadyCreated,
+    #[error("specified account key is not match")]
+    AccountKeyIsNotMatch,
     #[error("empty id provided for the new bank account")]
     EmptyAccountId,
     #[error("empty account holder id provided for the new bank account")]
@@ -201,7 +203,7 @@ impl aggregate::Aggregate for Account {
                 _ => Err(AccountError::NotCreatedYet),
             },
             Some(mut account) => match event {
-                AccountEvent::Activated { .. } => {
+                AccountEvent::Connected { .. } => {
                     account.is_active = true;
                     Ok(account)
                 }
@@ -211,7 +213,7 @@ impl aggregate::Aggregate for Account {
                     account.permissive_roles = permissive_roles;
                     Ok(account)
                 }
-                AccountEvent::Deactivated { .. } => {
+                AccountEvent::Disconnected { .. } => {
                     account.is_active = false;
                     Ok(account)
                 }
@@ -302,5 +304,14 @@ impl AccountRoot {
         }
 
         aggregate::Root::<Account>::record_new(AccountEvent::Created { id, key }.into()).map(Self)
+    }
+
+    pub fn connect(&mut self, key: AccountKey, ea_version: EaVersion) -> Result<(), AccountError> {
+        if self.key != key {
+            return Err(AccountError::AccountKeyIsNotMatch);
+        }
+        let id = self.aggregate_id().clone();
+        self.record_that(AccountEvent::Connected { id, ea_version }.into());
+        Ok(())
     }
 }
