@@ -1,76 +1,136 @@
-use std::collections::HashMap;
+use std::borrow::{Borrow, BorrowMut};
+use std::collections::{HashMap, HashSet};
 
 use eventually::aggregate;
 use eventually::message::Message;
 use eventually_macros::aggregate_root;
 use rust_decimal::Decimal;
 
-pub type BankAccountRepository<S> = aggregate::EventSourcedRepository<BankAccount, S>;
+pub type AccountRepository<S> = aggregate::EventSourcedRepository<Account, S>;
 
-pub type TransactionId = String;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Transaction {
-    pub id: TransactionId,
-    pub beneficiary_account_id: BankAccountId,
-    pub amount: Decimal,
-}
-
-pub type BankAccountHolderId = String;
-pub type BankAccountId = String;
+pub type CopyTradeId = String;
+pub type TradeId = String;
+pub type TradeSymbol = String;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BankAccountEvent {
-    WasOpened {
-        id: BankAccountId,
-        account_holder_id: BankAccountHolderId,
-        initial_balance: Option<Decimal>,
+pub enum TradeType {
+    Buy,
+    Sell,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TradeOpenDetails {
+    pub ticket_no: i16,
+    pub symbol: TradeSymbol,
+    pub trade_type: TradeType,
+    pub price: Decimal,
+    pub lots: Decimal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TradeCloseDetails {
+    pub price: Decimal,
+    pub lots: Decimal,
+}
+
+pub type AccountId = String;
+pub type AccountKey = String;
+pub type EaVersion = String;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountRole {
+    Publisher,
+    Subscriber,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountEvent {
+    Created {
+        id: AccountId,
+        key: AccountKey,
     },
-    DepositWasRecorded {
-        amount: Decimal,
+    Activated {
+        id: AccountId,
     },
-    TransferWasSent {
-        transaction: Transaction,
-        message: Option<String>,
+    Deactivated {
+        id: AccountId,
     },
-    TransferWasReceived {
-        transaction: Transaction,
-        message: Option<String>,
+    PermissiveRolesChanged {
+        id: AccountId,
+        permissive_roles: Vec<AccountRole>,
     },
-    TransferWasDeclined {
-        transaction_id: TransactionId,
-        reason: Option<String>,
+    BalanceChanged {
+        id: AccountId,
+        balance: Decimal,
     },
-    TransferWasConfirmed {
-        transaction_id: TransactionId,
+    TradeOpened {
+        id: AccountId,
+        trade_id: TradeId,
+        details: TradeOpenDetails,
     },
-    WasClosed,
-    WasReopened {
-        reopening_balance: Option<Decimal>,
+    TradeClosed {
+        id: AccountId,
+        trade_id: TradeId,
+        details: TradeCloseDetails,
+    },
+    TradeOpenReceived {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+    },
+    TradeOpenFailed {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+        message: String,
+    },
+    TradeOpenCopied {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+        trade_id: TradeId,
+        details: TradeOpenDetails,
+    },
+    TradeCloseReceived {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+    },
+    TradeCloseFailed {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+        message: String,
+    },
+    TradeCloseCopied {
+        id: AccountId,
+        copy_trade_id: CopyTradeId,
+        trade_id: TradeId,
+        details: TradeCloseDetails,
     },
 }
 
-impl Message for BankAccountEvent {
+impl Message for AccountEvent {
     fn name(&self) -> &'static str {
         match self {
-            BankAccountEvent::WasOpened { .. } => "BankAccountWasOpened",
-            BankAccountEvent::DepositWasRecorded { .. } => "BankAccountDepositWasRecorded",
-            BankAccountEvent::TransferWasSent { .. } => "BankAccountTransferWasSent",
-            BankAccountEvent::TransferWasReceived { .. } => "BankAccountTransferWasReceived",
-            BankAccountEvent::TransferWasDeclined { .. } => "BankAccountTransferWasDeclined",
-            BankAccountEvent::TransferWasConfirmed { .. } => "BankAccountTransferWasConfirmed",
-            BankAccountEvent::WasClosed { .. } => "BankAccountWasClosed",
-            BankAccountEvent::WasReopened { .. } => "BankAccountWasReopened",
+            AccountEvent::Created { .. } => "AccountEventCreated",
+            AccountEvent::Activated { .. } => "AccountEventActivated",
+            AccountEvent::Deactivated { .. } => "AccountEventDeactivated",
+            AccountEvent::PermissiveRolesChanged { .. } => "AccountEventPermissiveRolesChanged",
+            AccountEvent::BalanceChanged { .. } => "AccountEventBalanceChanged",
+            AccountEvent::TradeOpened { .. } => "AccountEventTradeOpened",
+            AccountEvent::TradeClosed { .. } => "AccountEventTradeClosed",
+            AccountEvent::TradeOpenReceived { .. } => "AccountEventTradeOpenReceived",
+            AccountEvent::TradeOpenFailed { .. } => "AccountEventTradeOpenFailed",
+            AccountEvent::TradeOpenCopied { .. } => "AccountEventTradeOpenCopied",
+            AccountEvent::TradeCloseReceived { .. } => "AccountEventTradeCloseReceived",
+            AccountEvent::TradeCloseFailed { .. } => "AccountEventTradeCloseFailed",
+            AccountEvent::TradeCloseCopied { .. } => "AccountEventTradeCloseCopied",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum BankAccountError {
-    #[error("bank account has not been opened yet")]
-    NotOpenedYet,
-    #[error("bank account has already been opened")]
-    AlreadyOpened,
+pub enum AccountError {
+    #[error("account is not yet created")]
+    NotCreatedYet,
+    #[error("account has already been created")]
+    AlreadyCreated,
     #[error("empty id provided for the new bank account")]
     EmptyAccountId,
     #[error("empty account holder id provided for the new bank account")]
@@ -81,8 +141,8 @@ pub enum BankAccountError {
     NoMoneyDeposited,
     #[error("transfer could not be sent due to insufficient funds")]
     InsufficientFunds,
-    #[error("transfer transaction was destined to a different recipient: {0}")]
-    WrongTransactionRecipient(BankAccountId),
+    #[error("transfer Trade was destined to a different recipient: {0}")]
+    WrongTradeRecipient(AccountId),
     #[error("the account is closed")]
     Closed,
     #[error("bank account has already been closed")]
@@ -90,20 +150,35 @@ pub enum BankAccountError {
 }
 
 #[derive(Debug, Clone)]
-pub struct BankAccount {
-    id: BankAccountId,
-    current_balance: Decimal,
-    pending_transactions: HashMap<TransactionId, Transaction>,
-    is_closed: bool,
+pub struct Position {
+    pub trade_id: TradeId,
+    pub copy_trade_id: Option<CopyTradeId>,
+    pub ticket_no: i16,
+    pub symbol: TradeSymbol,
+    pub trade_type: TradeType,
+    pub price_opened: Decimal,
+    pub lots: Decimal,
 }
 
-impl aggregate::Aggregate for BankAccount {
-    type Id = BankAccountId;
-    type Event = BankAccountEvent;
-    type Error = BankAccountError;
+#[derive(Debug, Clone)]
+pub struct Account {
+    id: AccountId,
+    key: AccountKey,
+    permissive_roles: Vec<AccountRole>,
+    role: Option<AccountRole>,
+    current_balance: Option<Decimal>,
+    trade_applied: HashSet<CopyTradeId>,
+    current_position: HashMap<TradeId, Position>,
+    is_active: bool,
+}
+
+impl aggregate::Aggregate for Account {
+    type Id = AccountId;
+    type Event = AccountEvent;
+    type Error = AccountError;
 
     fn type_name() -> &'static str {
-        "BankAccount"
+        "Account"
     }
 
     fn aggregate_id(&self) -> &Self::Id {
@@ -113,189 +188,119 @@ impl aggregate::Aggregate for BankAccount {
     fn apply(state: Option<Self>, event: Self::Event) -> Result<Self, Self::Error> {
         match state {
             None => match event {
-                BankAccountEvent::WasOpened {
+                AccountEvent::Created { id, key, .. } => Ok(Account {
                     id,
-                    initial_balance,
-                    ..
-                } => Ok(BankAccount {
-                    id,
-                    current_balance: initial_balance.unwrap_or_default(),
-                    pending_transactions: HashMap::default(),
-                    is_closed: false,
+                    key,
+                    is_active: true,
+                    current_balance: None,
+                    current_position: HashMap::new(),
+                    permissive_roles: Vec::new(),
+                    role: None,
+                    trade_applied: HashSet::new(),
                 }),
-                _ => Err(BankAccountError::NotOpenedYet),
+                _ => Err(AccountError::NotCreatedYet),
             },
             Some(mut account) => match event {
-                BankAccountEvent::DepositWasRecorded { amount } => {
-                    account.current_balance += amount;
+                AccountEvent::Activated { .. } => {
+                    account.is_active = true;
                     Ok(account)
                 }
-                BankAccountEvent::TransferWasReceived { transaction, .. } => {
-                    account.current_balance += transaction.amount;
+                AccountEvent::PermissiveRolesChanged {
+                    permissive_roles, ..
+                } => {
+                    account.permissive_roles = permissive_roles;
                     Ok(account)
                 }
-                BankAccountEvent::TransferWasSent { transaction, .. } => {
-                    account.current_balance -= transaction.amount;
-                    account
-                        .pending_transactions
-                        .insert(transaction.id.clone(), transaction);
+                AccountEvent::Deactivated { .. } => {
+                    account.is_active = false;
                     Ok(account)
                 }
-                BankAccountEvent::TransferWasConfirmed { transaction_id } => {
-                    account.pending_transactions.remove(&transaction_id);
+                AccountEvent::BalanceChanged { balance, .. } => {
+                    account.current_balance = Some(balance);
                     Ok(account)
                 }
-                BankAccountEvent::TransferWasDeclined { transaction_id, .. } => {
-                    if let Some(transaction) = account.pending_transactions.remove(&transaction_id)
-                    {
-                        account.current_balance += transaction.amount;
+                AccountEvent::TradeOpened {
+                    trade_id, details, ..
+                } => {
+                    account.current_position.insert(
+                        trade_id.clone(),
+                        Position {
+                            trade_id,
+                            copy_trade_id: None,
+                            ticket_no: details.ticket_no,
+                            symbol: details.symbol,
+                            trade_type: details.trade_type,
+                            price_opened: details.price,
+                            lots: details.lots,
+                        },
+                    );
+                    Ok(account)
+                }
+                AccountEvent::TradeClosed {
+                    trade_id, details, ..
+                } => {
+                    if let Some(position) = account.current_position.get_mut(&trade_id) {
+                        position.lots -= details.lots;
+                        if position.lots <= 0.into() {
+                            account.current_position.remove(&trade_id);
+                        }
                     }
-
                     Ok(account)
                 }
-                BankAccountEvent::WasClosed => {
-                    account.is_closed = true;
-                    account.current_balance = Decimal::default();
+                AccountEvent::TradeOpenReceived { .. } => Ok(account),
+                AccountEvent::TradeOpenFailed { .. } => Ok(account),
+                AccountEvent::TradeOpenCopied {
+                    copy_trade_id,
+                    trade_id,
+                    details,
+                    ..
+                } => {
+                    account.current_position.insert(
+                        trade_id.clone(),
+                        Position {
+                            trade_id: trade_id,
+                            copy_trade_id: Option::Some(copy_trade_id),
+                            ticket_no: details.ticket_no,
+                            symbol: details.symbol,
+                            trade_type: details.trade_type,
+                            price_opened: details.price,
+                            lots: details.lots,
+                        },
+                    );
                     Ok(account)
                 }
-                BankAccountEvent::WasReopened { reopening_balance } => {
-                    account.is_closed = false;
-                    account.current_balance = reopening_balance.unwrap_or_default();
+                AccountEvent::TradeCloseReceived { .. } => Ok(account),
+                AccountEvent::TradeCloseFailed { .. } => Ok(account),
+                AccountEvent::TradeCloseCopied {
+                    copy_trade_id,
+                    trade_id,
+                    details,
+                    ..
+                } => {
+                    if let Some(position) = account.current_position.get_mut(&trade_id) {
+                        position.lots -= details.lots;
+                        if position.lots <= 0.into() {
+                            account.current_position.remove(&trade_id);
+                        }
+                    }
                     Ok(account)
                 }
-                BankAccountEvent::WasOpened { .. } => Err(BankAccountError::AlreadyOpened),
+                _ => Err(AccountError::AlreadyCreated),
             },
         }
     }
 }
 
-#[aggregate_root(BankAccount)]
+#[aggregate_root(Account)]
 #[derive(Debug, Clone)]
-pub struct BankAccountRoot;
+pub struct AccountRoot;
 
-impl BankAccountRoot {
-    pub fn open(
-        id: BankAccountId,
-        account_holder_id: BankAccountHolderId,
-        opening_balance: Option<Decimal>,
-    ) -> Result<Self, BankAccountError> {
+impl AccountRoot {
+    pub fn new(id: AccountId, key: AccountKey) -> Result<Self, AccountError> {
         if id.is_empty() {
-            return Err(BankAccountError::EmptyAccountId);
+            return Err(AccountError::EmptyAccountId);
         }
 
-        if account_holder_id.is_empty() {
-            return Err(BankAccountError::EmptyAccountHolderId);
-        }
-
-        aggregate::Root::<BankAccount>::record_new(
-            BankAccountEvent::WasOpened {
-                id,
-                account_holder_id,
-                initial_balance: opening_balance,
-            }
-            .into(),
-        )
-        .map(Self)
-    }
-
-    pub fn deposit(&mut self, money: Decimal) -> Result<(), BankAccountError> {
-        if self.is_closed {
-            return Err(BankAccountError::Closed);
-        }
-
-        if money.is_sign_negative() {
-            return Err(BankAccountError::NegativeDepositAttempted);
-        }
-
-        if money.is_zero() {
-            return Err(BankAccountError::NoMoneyDeposited);
-        }
-
-        self.record_that(BankAccountEvent::DepositWasRecorded { amount: money }.into())
-    }
-
-    pub fn send_transfer(
-        &mut self,
-        mut transaction: Transaction,
-        message: Option<String>,
-    ) -> Result<(), BankAccountError> {
-        if self.is_closed {
-            return Err(BankAccountError::Closed);
-        }
-
-        // NOTE: transaction amounts should be positive, so they can be subtracted
-        // when applied to a Bank Account.
-        if transaction.amount.is_sign_negative() {
-            transaction.amount.set_sign_positive(true);
-        }
-
-        if self.current_balance < transaction.amount {
-            return Err(BankAccountError::InsufficientFunds);
-        }
-
-        let transaction_already_pending = self.pending_transactions.get(&transaction.id).is_some();
-        if transaction_already_pending {
-            return Ok(());
-        }
-
-        self.record_that(
-            BankAccountEvent::TransferWasSent {
-                message,
-                transaction,
-            }
-            .into(),
-        )
-    }
-
-    pub fn receive_transfer(
-        &mut self,
-        transaction: Transaction,
-        message: Option<String>,
-    ) -> Result<(), BankAccountError> {
-        if self.is_closed {
-            return Err(BankAccountError::Closed);
-        }
-
-        if self.id != transaction.beneficiary_account_id {
-            return Err(BankAccountError::WrongTransactionRecipient(
-                transaction.beneficiary_account_id,
-            ));
-        }
-
-        self.record_that(
-            BankAccountEvent::TransferWasReceived {
-                transaction,
-                message,
-            }
-            .into(),
-        )
-    }
-
-    pub fn record_transfer_success(
-        &mut self,
-        transaction_id: TransactionId,
-    ) -> Result<(), BankAccountError> {
-        let is_transaction_recorded = self.pending_transactions.get(&transaction_id).is_some();
-        if !is_transaction_recorded {
-            // TODO: return error
-        }
-
-        self.record_that(BankAccountEvent::TransferWasConfirmed { transaction_id }.into())
-    }
-
-    pub fn close(&mut self) -> Result<(), BankAccountError> {
-        if self.is_closed {
-            return Err(BankAccountError::AlreadyClosed);
-        }
-
-        self.record_that(BankAccountEvent::WasClosed.into())
-    }
-
-    pub fn reopen(&mut self, reopening_balance: Option<Decimal>) -> Result<(), BankAccountError> {
-        if !self.is_closed {
-            return Err(BankAccountError::AlreadyOpened);
-        }
-
-        self.record_that(BankAccountEvent::WasReopened { reopening_balance }.into())
+        aggregate::Root::<Account>::record_new(AccountEvent::Created { id, key }.into()).map(Self)
     }
 }

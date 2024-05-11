@@ -1,5 +1,7 @@
 use ntex::web;
 
+mod application;
+mod domain;
 mod error;
 mod services;
 
