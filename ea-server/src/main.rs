@@ -2,6 +2,7 @@ mod application;
 mod config;
 mod domain;
 mod error;
+mod persist;
 mod queries;
 mod routes;
 mod services;
@@ -30,3 +31,6 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
+
+#[cfg(test)]
+mod testing;

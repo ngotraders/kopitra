@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use cqrs_es::persist::GenericQuery;
 use cqrs_es::{EventEnvelope, Query, View};
-use postgres_es::PostgresViewRepository;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::Session;
 use crate::domain::SessionEvent;
+use crate::persist::InMemoryViewRepository;
 
 pub struct SimpleLoggingQuery {}
 
@@ -25,11 +25,11 @@ impl Query<Session> for SimpleLoggingQuery {
 // which will serialize and persist our view after it is updated. It also
 // provides a `load` method to deserialize the view on request.
 pub type SessionQuery =
-    GenericQuery<PostgresViewRepository<SessionView, Session>, SessionView, Session>;
+    GenericQuery<InMemoryViewRepository<SessionView, Session>, SessionView, Session>;
 
 // The view for a Session query, for a standard http application this should
 // be designed to reflect the response dto that will be returned to a user.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct SessionView {
     session_id: String,
     account_id: Option<String>,
