@@ -8,7 +8,7 @@ use utoipa::{Modify, OpenApi};
 
 use super::messages::{GetMessagesResponse, Message, PostMessagesRequest};
 use super::session::{
-    CopyTradeCloseOrder, CopyTradeOpenOrder, Position, RevokeSessionRequest, StartSessionResponse,
+    CloseSessionRequest, CopyTradeCloseOrder, CopyTradeOpenOrder, OpenSessionResponse, Position,
 };
 use crate::error::HttpError;
 
@@ -21,8 +21,8 @@ use super::session;
     info(title = "FX Copy Trading API",),
     servers((url = "http://localhost:8080/api/ea/")),
     paths(
-        session::start_session,
-        session::revoke_session,
+        session::open_session,
+        session::close_session,
         messages::get_messages,
         messages::post_messages,
     ),
@@ -31,8 +31,8 @@ use super::session;
             Position,
             CopyTradeOpenOrder,
             CopyTradeCloseOrder,
-            StartSessionResponse,
-            RevokeSessionRequest,
+            OpenSessionResponse,
+            CloseSessionRequest,
             Message,
             GetMessagesResponse,
             PostMessagesRequest

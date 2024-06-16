@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::application::ApplicationState;
+
 pub struct SessionState {
     pub session_token: Mutex<Option<String>>,
 }
@@ -59,7 +61,7 @@ pub struct CopyTradeCloseOrder {
 
 /// Start session response
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-pub struct StartSessionResponse {
+pub struct OpenSessionResponse {
     /// session token
     pub token: String,
     /// prefered role for account
@@ -72,14 +74,14 @@ pub struct StartSessionResponse {
     pub pending_order_close: Vec<CopyTradeCloseOrder>,
 }
 
-/// Revoke session request
+/// Close session request
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-pub struct RevokeSessionRequest {
-    /// reason of revoking session
+pub struct CloseSessionRequest {
+    /// reason of close session
     pub reason: String,
 }
 
-/// Start session
+/// Open session
 #[utoipa::path(
   post,
   path = "/session",
@@ -88,15 +90,15 @@ pub struct RevokeSessionRequest {
     ("X-Ea-Version" = String, Header, description = "EA version"),
   ),
   responses(
-    (status = 200, description = "Session created", body = StartSessionResponse),
+    (status = 200, description = "OK", body = OpenSessionResponse),
     (status = 400, description = "Invalid identification key or version"),
     (status = 403, description = "Session already exists"),
   ),
 )]
 #[web::post("/session")]
-pub async fn start_session(
+pub async fn open_session(
     req: web::HttpRequest,
-    state: web::types::State<SessionState>,
+    state: web::types::State<ApplicationState>,
 ) -> web::HttpResponse {
     let ea_key: &str;
     match req.headers().get("X-Ea-Key") {
@@ -107,37 +109,39 @@ pub async fn start_session(
                 .expect("X-Ea-Key cannot be handled as string")
         }
     };
-    let _ea_version: &str;
+    let ea_version: &str;
     match req.headers().get("X-Ea-Version") {
         None => return web::HttpResponse::BadRequest().finish(),
         Some(value) => {
-            _ea_version = value
+            ea_version = value
                 .to_str()
                 .expect("X-Ea-Version cannot be handled as string")
         }
     };
-    let session_token = state.update_session_token(ea_key.to_string());
-
-    web::HttpResponse::Ok().json(&StartSessionResponse {
-        token: session_token,
-        role: None,
-        positions: [].to_vec(),
-        pending_order_open: [].to_vec(),
-        pending_order_close: [].to_vec(),
-    })
+    let result = state.open_session(ea_key, ea_version).await;
+    match result {
+        Err(_) => web::HttpResponse::BadRequest().finish(),
+        Ok(session_token) => web::HttpResponse::Ok().json(&OpenSessionResponse {
+            token: session_token,
+            role: None,
+            positions: [].to_vec(),
+            pending_order_open: [].to_vec(),
+            pending_order_close: [].to_vec(),
+        }),
+    }
 }
 
-/// Revoke session
+/// Close session
 #[utoipa::path(
-  post,
-  path = "/session/revoke",
-  request_body = RevokeSessionRequest,
+  delete,
+  path = "/session",
+  request_body = CloseSessionRequest,
   params(
     ("X-Ea-Key" = String, Header, description = "Identification key for the trading account"),
     ("X-Ea-Version" = String, Header, description = "EA version"),
   ),
   responses(
-    (status = 200, description = "Session revoked"),
+    (status = 200, description = "OK"),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
@@ -145,8 +149,8 @@ pub async fn start_session(
       ("session_token" = [])
   )
 )]
-#[web::post("/session/revoke")]
-pub async fn revoke_session() -> web::HttpResponse {
+#[web::delete("/session")]
+pub async fn close_session() -> web::HttpResponse {
     web::HttpResponse::Ok().finish()
 }
 
@@ -154,6 +158,6 @@ pub fn ntex_config(cfg: &mut web::ServiceConfig) {
     cfg.state(SessionState {
         session_token: None.into(),
     });
-    cfg.service(start_session);
-    cfg.service(revoke_session);
+    cfg.service(open_session);
+    cfg.service(close_session);
 }

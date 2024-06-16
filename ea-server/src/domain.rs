@@ -8,26 +8,14 @@ use crate::services::SessionServices;
 
 #[derive(Debug, Deserialize)]
 pub enum SessionCommand {
-    OpenSession {
-        session_id: String,
-        account_key: String,
-        ea_version: String,
-    },
-    CloseSession {
-        session_id: String,
-    },
+    OpenSession { ea_key: String, ea_version: String },
+    CloseSession {},
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SessionEvent {
-    SessionOpened {
-        session_id: String,
-        account_key: String,
-        ea_version: String,
-    },
-    SessionClosed {
-        session_id: String,
-    },
+    SessionOpened { ea_key: String, ea_version: String },
+    SessionClosed {},
 }
 
 impl DomainEvent for SessionEvent {
@@ -86,20 +74,10 @@ impl Aggregate for Session {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            SessionCommand::OpenSession {
-                session_id,
-                account_key,
-                ea_version,
-            } => {
-                return Ok(vec![SessionEvent::SessionOpened {
-                    session_id,
-                    account_key,
-                    ea_version,
-                }])
+            SessionCommand::OpenSession { ea_key, ea_version } => {
+                return Ok(vec![SessionEvent::SessionOpened { ea_key, ea_version }])
             }
-            SessionCommand::CloseSession { session_id } => {
-                return Ok(vec![SessionEvent::SessionClosed { session_id }])
-            }
+            SessionCommand::CloseSession {} => return Ok(vec![SessionEvent::SessionClosed {}]),
         }
     }
 
@@ -122,19 +100,14 @@ mod test {
     #[test]
     fn test_close() {
         let previous = SessionEvent::SessionOpened {
-            session_id: "session-id".to_string(),
-            account_key: "acc-key".to_string(),
+            ea_key: "acc-key".to_string(),
             ea_version: "version".to_string(),
         };
-        let expected = SessionEvent::SessionClosed {
-            session_id: "session-id".to_string(),
-        };
+        let expected = SessionEvent::SessionClosed {};
 
         SessionTestFramework::with(SessionServices::new(Box::new(HappyPathSessionServices {})))
             .given(vec![previous])
-            .when(SessionCommand::CloseSession {
-                session_id: "session-id".to_string(),
-            })
+            .when(SessionCommand::CloseSession {})
             .then_expect_events(vec![expected]);
     }
 }

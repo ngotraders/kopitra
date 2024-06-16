@@ -6,10 +6,9 @@ mod persist;
 mod queries;
 mod routes;
 mod services;
-mod state;
 
+use application::ApplicationState;
 use ntex::web;
-use state::new_application_state;
 
 #[ntex::main]
 async fn main() -> std::io::Result<()> {
@@ -17,7 +16,7 @@ async fn main() -> std::io::Result<()> {
         web::App::new()
             // Register swagger endpoints
             .configure(routes::openapi::ntex_config)
-            .state(new_application_state)
+            .state(ApplicationState::new)
             // Register other endpoints
             .service(
                 ntex::web::scope("/api/ea")

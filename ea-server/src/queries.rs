@@ -31,9 +31,8 @@ pub type SessionQuery =
 // be designed to reflect the response dto that will be returned to a user.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct SessionView {
-    session_id: String,
     account_id: Option<String>,
-    account_key: String,
+    ea_key: String,
     ea_version: String,
     open: bool,
 }
@@ -44,14 +43,9 @@ pub struct SessionView {
 impl View<Session> for SessionView {
     fn update(&mut self, event: &EventEnvelope<Session>) {
         match &event.payload {
-            SessionEvent::SessionOpened {
-                session_id,
-                account_key,
-                ea_version,
-            } => {
+            SessionEvent::SessionOpened { ea_key, ea_version } => {
                 self.open = true;
-                self.session_id = session_id.clone();
-                self.account_key = account_key.clone();
+                self.ea_key = ea_key.clone();
                 self.ea_version = ea_version.clone();
             }
             SessionEvent::SessionClosed { .. } => {
