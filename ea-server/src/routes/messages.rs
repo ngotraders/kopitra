@@ -33,7 +33,7 @@ pub struct PostMessagesRequest {
     ("X-Ea-Version" = String, Header, description = "EA version"),
   ),
   responses(
-    (status = 200, description = "Session created", body = GetMessagesResponse),
+    (status = 200, description = "OK", body = GetMessagesResponse),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
@@ -46,7 +46,7 @@ pub async fn get_messages() -> web::HttpResponse {
     web::HttpResponse::Ok().finish()
 }
 
-/// Revoke session
+/// Post messages
 #[utoipa::path(
   post,
   path = "/messages",
@@ -56,7 +56,7 @@ pub async fn get_messages() -> web::HttpResponse {
     ("X-Ea-Version" = String, Header, description = "EA version"),
   ),
   responses(
-    (status = 200, description = "Session revoked"),
+    (status = 200, description = "OK"),
     (status = 400, description = "Invalid identification key or version"),
     (status = 401, description = "Session token is not valid"),
   ),
