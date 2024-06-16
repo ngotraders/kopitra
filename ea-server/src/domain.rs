@@ -1,317 +1,140 @@
-use std::collections::{HashMap, HashSet};
+use std::fmt::{Display, Formatter};
 
-use eventually::aggregate;
-use eventually::message::Message;
-use eventually_macros::aggregate_root;
-use rust_decimal::Decimal;
+use async_trait::async_trait;
+use cqrs_es::{Aggregate, DomainEvent};
+use serde::{Deserialize, Serialize};
 
-pub type AccountRepository<S> = aggregate::EventSourcedRepository<Account, S>;
+use crate::services::SessionServices;
 
-pub type CopyTradeId = String;
-pub type TradeId = String;
-pub type TradeSymbol = String;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TradeType {
-    Buy,
-    Sell,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TradeOpenDetails {
-    pub ticket_no: i16,
-    pub symbol: TradeSymbol,
-    pub trade_type: TradeType,
-    pub price: Decimal,
-    pub lots: Decimal,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TradeCloseDetails {
-    pub price: Decimal,
-    pub lots: Decimal,
-}
-
-pub type AccountId = String;
-pub type AccountKey = String;
-pub type EaVersion = String;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccountRole {
-    Publisher,
-    Subscriber,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccountEvent {
-    Created {
-        id: AccountId,
-        key: AccountKey,
+#[derive(Debug, Deserialize)]
+pub enum SessionCommand {
+    OpenSession {
+        session_id: String,
+        account_key: String,
+        ea_version: String,
     },
-    Connected {
-        id: AccountId,
-        ea_version: EaVersion,
-    },
-    Disconnected {
-        id: AccountId,
-    },
-    PermissiveRolesChanged {
-        id: AccountId,
-        permissive_roles: Vec<AccountRole>,
-    },
-    BalanceChanged {
-        id: AccountId,
-        balance: Decimal,
-    },
-    TradeOpened {
-        id: AccountId,
-        trade_id: TradeId,
-        details: TradeOpenDetails,
-    },
-    TradeClosed {
-        id: AccountId,
-        trade_id: TradeId,
-        details: TradeCloseDetails,
-    },
-    TradeOpenReceived {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-    },
-    TradeOpenFailed {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-        message: String,
-    },
-    TradeOpenCopied {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-        trade_id: TradeId,
-        details: TradeOpenDetails,
-    },
-    TradeCloseReceived {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-    },
-    TradeCloseFailed {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-        message: String,
-    },
-    TradeCloseCopied {
-        id: AccountId,
-        copy_trade_id: CopyTradeId,
-        trade_id: TradeId,
-        details: TradeCloseDetails,
+    CloseSession {
+        session_id: String,
     },
 }
 
-impl Message for AccountEvent {
-    fn name(&self) -> &'static str {
-        match self {
-            AccountEvent::Created { .. } => "AccountEventCreated",
-            AccountEvent::Connected { .. } => "AccountEventConnected",
-            AccountEvent::Disconnected { .. } => "AccountEventDisconnected",
-            AccountEvent::PermissiveRolesChanged { .. } => "AccountEventPermissiveRolesChanged",
-            AccountEvent::BalanceChanged { .. } => "AccountEventBalanceChanged",
-            AccountEvent::TradeOpened { .. } => "AccountEventTradeOpened",
-            AccountEvent::TradeClosed { .. } => "AccountEventTradeClosed",
-            AccountEvent::TradeOpenReceived { .. } => "AccountEventTradeOpenReceived",
-            AccountEvent::TradeOpenFailed { .. } => "AccountEventTradeOpenFailed",
-            AccountEvent::TradeOpenCopied { .. } => "AccountEventTradeOpenCopied",
-            AccountEvent::TradeCloseReceived { .. } => "AccountEventTradeCloseReceived",
-            AccountEvent::TradeCloseFailed { .. } => "AccountEventTradeCloseFailed",
-            AccountEvent::TradeCloseCopied { .. } => "AccountEventTradeCloseCopied",
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SessionEvent {
+    SessionOpened {
+        session_id: String,
+        account_key: String,
+        ea_version: String,
+    },
+    SessionClosed {
+        session_id: String,
+    },
+}
+
+impl DomainEvent for SessionEvent {
+    fn event_type(&self) -> String {
+        let event_type: &str = match self {
+            SessionEvent::SessionOpened { .. } => "SessionOpened",
+            SessionEvent::SessionClosed { .. } => "SessionClosed",
+        };
+        event_type.to_string()
+    }
+
+    fn event_version(&self) -> String {
+        "1.0".to_string()
+    }
+}
+
+#[derive(Debug)]
+pub struct SessionError(String);
+
+impl Display for SessionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for SessionError {}
+
+impl From<&str> for SessionError {
+    fn from(message: &str) -> Self {
+        SessionError(message.to_string())
+    }
+}
+
+#[derive(Serialize, Default, Deserialize)]
+pub struct Session {
+    opened: bool,
+}
+
+#[async_trait]
+impl Aggregate for Session {
+    type Command = SessionCommand;
+    type Event = SessionEvent;
+    type Error = SessionError;
+    type Services = SessionServices;
+
+    // This identifier should be unique to the system.
+    fn aggregate_type() -> String {
+        "Session".to_string()
+    }
+
+    // The aggregate logic goes here. Note that this will be the _bulk_ of a CQRS system
+    // so expect to use helper functions elsewhere to keep the code clean.
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
+        match command {
+            SessionCommand::OpenSession {
+                session_id,
+                account_key,
+                ea_version,
+            } => {
+                return Ok(vec![SessionEvent::SessionOpened {
+                    session_id,
+                    account_key,
+                    ea_version,
+                }])
+            }
+            SessionCommand::CloseSession { session_id } => {
+                return Ok(vec![SessionEvent::SessionClosed { session_id }])
+            }
+        }
+    }
+
+    fn apply(&mut self, event: Self::Event) {
+        match event {
+            SessionEvent::SessionOpened { .. } => self.opened = true,
+            SessionEvent::SessionClosed { .. } => self.opened = false,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum AccountError {
-    #[error("account is not yet created")]
-    NotCreatedYet,
-    #[error("account has already been created")]
-    AlreadyCreated,
-    #[error("specified account key is not match")]
-    AccountKeyIsNotMatch,
-    #[error("empty id provided for the new bank account")]
-    EmptyAccountId,
-    #[error("empty account holder id provided for the new bank account")]
-    EmptyAccountHolderId,
-    #[error("a deposit was attempted with negative import")]
-    NegativeDepositAttempted,
-    #[error("no money to deposit has been specified")]
-    NoMoneyDeposited,
-    #[error("transfer could not be sent due to insufficient funds")]
-    InsufficientFunds,
-    #[error("transfer Trade was destined to a different recipient: {0}")]
-    WrongTradeRecipient(AccountId),
-    #[error("the account is closed")]
-    Closed,
-    #[error("bank account has already been closed")]
-    AlreadyClosed,
-}
+#[cfg(test)]
+mod test {
+    use crate::services::{HappyPathSessionServices, SessionServices};
 
-#[derive(Debug, Clone)]
-pub struct Position {
-    pub trade_id: TradeId,
-    pub copy_trade_id: Option<CopyTradeId>,
-    pub ticket_no: i16,
-    pub symbol: TradeSymbol,
-    pub trade_type: TradeType,
-    pub price_opened: Decimal,
-    pub lots: Decimal,
-}
+    use super::{Session, SessionCommand, SessionEvent};
+    use cqrs_es::test::TestFramework;
+    type SessionTestFramework = TestFramework<Session>;
 
-#[derive(Debug, Clone)]
-pub struct Account {
-    id: AccountId,
-    key: AccountKey,
-    permissive_roles: Vec<AccountRole>,
-    role: Option<AccountRole>,
-    current_balance: Option<Decimal>,
-    trade_applied: HashSet<CopyTradeId>,
-    current_position: HashMap<TradeId, Position>,
-    is_active: bool,
-}
+    #[test]
+    fn test_close() {
+        let previous = SessionEvent::SessionOpened {
+            session_id: "session-id".to_string(),
+            account_key: "acc-key".to_string(),
+            ea_version: "version".to_string(),
+        };
+        let expected = SessionEvent::SessionClosed {
+            session_id: "session-id".to_string(),
+        };
 
-impl aggregate::Aggregate for Account {
-    type Id = AccountId;
-    type Event = AccountEvent;
-    type Error = AccountError;
-
-    fn type_name() -> &'static str {
-        "Account"
-    }
-
-    fn aggregate_id(&self) -> &Self::Id {
-        &self.id
-    }
-
-    fn apply(state: Option<Self>, event: Self::Event) -> Result<Self, Self::Error> {
-        match state {
-            None => match event {
-                AccountEvent::Created { id, key, .. } => Ok(Account {
-                    id,
-                    key,
-                    is_active: true,
-                    current_balance: None,
-                    current_position: HashMap::new(),
-                    permissive_roles: Vec::new(),
-                    role: None,
-                    trade_applied: HashSet::new(),
-                }),
-                _ => Err(AccountError::NotCreatedYet),
-            },
-            Some(mut account) => match event {
-                AccountEvent::Connected { .. } => {
-                    account.is_active = true;
-                    Ok(account)
-                }
-                AccountEvent::PermissiveRolesChanged {
-                    permissive_roles, ..
-                } => {
-                    account.permissive_roles = permissive_roles;
-                    Ok(account)
-                }
-                AccountEvent::Disconnected { .. } => {
-                    account.is_active = false;
-                    Ok(account)
-                }
-                AccountEvent::BalanceChanged { balance, .. } => {
-                    account.current_balance = Some(balance);
-                    Ok(account)
-                }
-                AccountEvent::TradeOpened {
-                    trade_id, details, ..
-                } => {
-                    account.current_position.insert(
-                        trade_id.clone(),
-                        Position {
-                            trade_id,
-                            copy_trade_id: None,
-                            ticket_no: details.ticket_no,
-                            symbol: details.symbol,
-                            trade_type: details.trade_type,
-                            price_opened: details.price,
-                            lots: details.lots,
-                        },
-                    );
-                    Ok(account)
-                }
-                AccountEvent::TradeClosed {
-                    trade_id, details, ..
-                } => {
-                    if let Some(position) = account.current_position.get_mut(&trade_id) {
-                        position.lots -= details.lots;
-                        if position.lots <= 0.into() {
-                            account.current_position.remove(&trade_id);
-                        }
-                    }
-                    Ok(account)
-                }
-                AccountEvent::TradeOpenReceived { .. } => Ok(account),
-                AccountEvent::TradeOpenFailed { .. } => Ok(account),
-                AccountEvent::TradeOpenCopied {
-                    copy_trade_id,
-                    trade_id,
-                    details,
-                    ..
-                } => {
-                    account.current_position.insert(
-                        trade_id.clone(),
-                        Position {
-                            trade_id: trade_id,
-                            copy_trade_id: Option::Some(copy_trade_id),
-                            ticket_no: details.ticket_no,
-                            symbol: details.symbol,
-                            trade_type: details.trade_type,
-                            price_opened: details.price,
-                            lots: details.lots,
-                        },
-                    );
-                    Ok(account)
-                }
-                AccountEvent::TradeCloseReceived { .. } => Ok(account),
-                AccountEvent::TradeCloseFailed { .. } => Ok(account),
-                AccountEvent::TradeCloseCopied {
-                    copy_trade_id,
-                    trade_id,
-                    details,
-                    ..
-                } => {
-                    if let Some(position) = account.current_position.get_mut(&trade_id) {
-                        position.lots -= details.lots;
-                        if position.lots <= 0.into() {
-                            account.current_position.remove(&trade_id);
-                        }
-                    }
-                    Ok(account)
-                }
-                _ => Err(AccountError::AlreadyCreated),
-            },
-        }
-    }
-}
-
-#[aggregate_root(Account)]
-#[derive(Debug, Clone)]
-pub struct AccountRoot;
-
-impl AccountRoot {
-    pub fn new(id: AccountId, key: AccountKey) -> Result<Self, AccountError> {
-        if id.is_empty() {
-            return Err(AccountError::EmptyAccountId);
-        }
-
-        aggregate::Root::<Account>::record_new(AccountEvent::Created { id, key }.into()).map(Self)
-    }
-
-    pub fn connect(&mut self, key: AccountKey, ea_version: EaVersion) -> Result<(), AccountError> {
-        if self.key != key {
-            return Err(AccountError::AccountKeyIsNotMatch);
-        }
-        let id = self.aggregate_id().clone();
-        self.record_that(AccountEvent::Connected { id, ea_version }.into());
-        Ok(())
+        SessionTestFramework::with(SessionServices::new(Box::new(HappyPathSessionServices {})))
+            .given(vec![previous])
+            .when(SessionCommand::CloseSession {
+                session_id: "session-id".to_string(),
+            })
+            .then_expect_events(vec![expected]);
     }
 }

@@ -10,7 +10,7 @@ pub struct SessionState {
 }
 
 impl SessionState {
-    pub fn update_session_token(&self, ea_key: String) -> String {
+    pub fn update_session_token(&self, _ea_key: String) -> String {
         let mut session_token_guard = self.session_token.lock().unwrap();
         let session_token = Uuid::new_v4();
         *session_token_guard = Some(session_token.to_string());
@@ -107,11 +107,11 @@ pub async fn start_session(
                 .expect("X-Ea-Key cannot be handled as string")
         }
     };
-    let ea_version: &str;
+    let _ea_version: &str;
     match req.headers().get("X-Ea-Version") {
         None => return web::HttpResponse::BadRequest().finish(),
         Some(value) => {
-            ea_version = value
+            _ea_version = value
                 .to_str()
                 .expect("X-Ea-Version cannot be handled as string")
         }
