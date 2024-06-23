@@ -8,13 +8,13 @@ use crate::services::SessionServices;
 
 #[derive(Debug, Deserialize)]
 pub enum SessionCommand {
-    OpenSession { ea_key: String, ea_version: String },
-    CloseSession {},
+    OpenSession { ea_key: String },
+    CloseSession { ea_key: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SessionEvent {
-    SessionOpened { ea_key: String, ea_version: String },
+    SessionOpened { ea_key: String },
     SessionClosed {},
 }
 
@@ -52,6 +52,7 @@ impl From<&str> for SessionError {
 #[derive(Serialize, Default, Deserialize)]
 pub struct Session {
     opened: bool,
+    ea_key: String,
 }
 
 #[async_trait]
@@ -74,17 +75,26 @@ impl Aggregate for Session {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            SessionCommand::OpenSession { ea_key, ea_version } => {
-                return Ok(vec![SessionEvent::SessionOpened { ea_key, ea_version }])
+            SessionCommand::OpenSession { ea_key } => {
+                return Ok(vec![SessionEvent::SessionOpened { ea_key }])
             }
-            SessionCommand::CloseSession {} => return Ok(vec![SessionEvent::SessionClosed {}]),
+            SessionCommand::CloseSession { ea_key } => {
+                print!("{}", self.ea_key);
+                if self.ea_key.ne(&ea_key) {
+                    return Err(SessionError("ea key is not match".to_string()));
+                }
+                return Ok(vec![SessionEvent::SessionClosed {}]);
+            }
         }
     }
 
     fn apply(&mut self, event: Self::Event) {
         match event {
-            SessionEvent::SessionOpened { .. } => self.opened = true,
-            SessionEvent::SessionClosed { .. } => self.opened = false,
+            SessionEvent::SessionOpened { ea_key } => {
+                self.ea_key = ea_key;
+                self.opened = true;
+            }
+            SessionEvent::SessionClosed {} => self.opened = false,
         }
     }
 }
@@ -101,13 +111,14 @@ mod test {
     fn test_close() {
         let previous = SessionEvent::SessionOpened {
             ea_key: "acc-key".to_string(),
-            ea_version: "version".to_string(),
         };
         let expected = SessionEvent::SessionClosed {};
 
         SessionTestFramework::with(SessionServices::new(Box::new(HappyPathSessionServices {})))
             .given(vec![previous])
-            .when(SessionCommand::CloseSession {})
+            .when(SessionCommand::CloseSession {
+                ea_key: "acc-key".to_string(),
+            })
             .then_expect_events(vec![expected]);
     }
 }

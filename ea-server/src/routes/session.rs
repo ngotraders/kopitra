@@ -1,24 +1,10 @@
-use std::sync::Mutex;
+use std::str;
 
 use ntex::web;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use crate::application::ApplicationState;
-
-pub struct SessionState {
-    pub session_token: Mutex<Option<String>>,
-}
-
-impl SessionState {
-    pub fn update_session_token(&self, _ea_key: String) -> String {
-        let mut session_token_guard = self.session_token.lock().unwrap();
-        let session_token = Uuid::new_v4();
-        *session_token_guard = Some(session_token.to_string());
-        session_token.to_string()
-    }
-}
 
 /// Position
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
@@ -81,6 +67,11 @@ pub struct CloseSessionRequest {
     pub reason: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
+pub struct ErrorResponse {
+    pub message: String,
+}
+
 /// Open session
 #[utoipa::path(
   post,
@@ -120,7 +111,9 @@ pub async fn open_session(
     };
     let result = state.open_session(ea_key, ea_version).await;
     match result {
-        Err(_) => web::HttpResponse::BadRequest().finish(),
+        Err(message) => web::HttpResponse::BadRequest().json(&ErrorResponse {
+            message: message.to_string(),
+        }),
         Ok(session_token) => web::HttpResponse::Ok().json(&OpenSessionResponse {
             token: session_token,
             role: None,
@@ -135,10 +128,10 @@ pub async fn open_session(
 #[utoipa::path(
   delete,
   path = "/session",
-  request_body = CloseSessionRequest,
   params(
     ("X-Ea-Key" = String, Header, description = "Identification key for the trading account"),
     ("X-Ea-Version" = String, Header, description = "EA version"),
+    ("Reason" = Option<String>, Query, description = "Reason for closing session")
   ),
   responses(
     (status = 200, description = "OK"),
@@ -150,14 +143,52 @@ pub async fn open_session(
   )
 )]
 #[web::delete("/session")]
-pub async fn close_session() -> web::HttpResponse {
-    web::HttpResponse::Ok().finish()
+pub async fn close_session(
+    req: web::HttpRequest,
+    state: web::types::State<ApplicationState>,
+) -> web::HttpResponse {
+    let ea_key: &str;
+    match req.headers().get("X-Ea-Key") {
+        None => return web::HttpResponse::BadRequest().finish(),
+        Some(value) => {
+            ea_key = value
+                .to_str()
+                .expect("X-Ea-Key cannot be handled as string")
+        }
+    };
+    let ea_version: &str;
+    match req.headers().get("X-Ea-Version") {
+        None => return web::HttpResponse::BadRequest().finish(),
+        Some(value) => {
+            ea_version = value
+                .to_str()
+                .expect("X-Ea-Version cannot be handled as string")
+        }
+    };
+    let auth_header_value: &str;
+    match req.headers().get("Authorization") {
+        None => return web::HttpResponse::BadRequest().finish(),
+        Some(value) => {
+            auth_header_value = value
+                .to_str()
+                .expect("Authorization cannot be handled as string")
+        }
+    };
+    if !auth_header_value.starts_with("Bearer ") {
+        return web::HttpResponse::BadRequest().finish();
+    }
+    let auth_token = &auth_header_value[7..auth_header_value.len()];
+
+    let result = state.close_session(auth_token, ea_key, ea_version).await;
+    match result {
+        Err(message) => web::HttpResponse::BadRequest().json(&ErrorResponse {
+            message: message.to_string(),
+        }),
+        Ok(_) => web::HttpResponse::Ok().finish(),
+    }
 }
 
 pub fn ntex_config(cfg: &mut web::ServiceConfig) {
-    cfg.state(SessionState {
-        session_token: None.into(),
-    });
     cfg.service(open_session);
     cfg.service(close_session);
 }

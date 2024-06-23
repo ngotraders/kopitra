@@ -16,7 +16,7 @@ async fn main() -> std::io::Result<()> {
         web::App::new()
             // Register swagger endpoints
             .configure(routes::openapi::ntex_config)
-            .state(ApplicationState::new)
+            .state(ApplicationState::new())
             // Register other endpoints
             .service(
                 ntex::web::scope("/api/ea")

@@ -13,7 +13,7 @@ use cqrs_es::{
 type LockedViewMap<V> = RwLock<HashMap<String, (V, i64)>>;
 
 #[derive(Clone)]
-pub(crate) struct InMemoryViewRepository<V, A>
+pub struct InMemoryViewRepository<V, A>
 where
     V: View<A>,
     A: Aggregate,
