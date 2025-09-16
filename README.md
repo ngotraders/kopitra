@@ -175,4 +175,3 @@ Before working with the platform, ensure you have the following:
 - [Azure Well-Architected Framework](https://learn.microsoft.com/azure/architecture/framework/)
 - [Azure API Management Documentation](https://learn.microsoft.com/azure/api-management/)
 - [Azure Kubernetes Service Documentation](https://learn.microsoft.com/azure/aks/)
-
