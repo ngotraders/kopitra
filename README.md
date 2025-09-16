@@ -53,11 +53,29 @@ flowchart LR
 
 ### Component Responsibilities
 - **Expert Advisor** – Publishes trade intentions, receives execution callbacks, and handles retry logic with idempotency keys.
-- **Rust Counterparty Service** – Runs on Azure App Service, terminates EA traffic, executes copy trades within the service boundary, normalizes broker payloads, and enforces the required request headers.
+- **Rust Counterparty Service** – Runs on Azure App Service, terminates EA traffic, executes copy trades within the service boundary, normalizes broker payloads, manages the EA-facing Web API session model, and enforces the required request headers.
 - **Management Server API** – Azure Functions exposing HTTP, timer, and Service Bus triggered functions for configuration, audit reporting, and operational automation.
 - **Web Frontend** – Deployed to Azure Static Web Apps, provides dashboards to observe synchronization health, manage accounts, and trigger administrative actions through the Functions API.
 
-Copy-trade replication completes inside the Rust counterparty service to keep latency predictable; Service Bus queues carry only secondary events such as audit trail enrichment, alerting, and configuration tasks.
+Copy-trade replication completes inside the Rust counterparty service to keep latency predictable; Service Bus queues carry only secondary events such as audit trail enrichment, alerting, and configuration tasks. Direct EA integration occurs exclusively over the documented Web API so that both directions of messaging stay under HTTP control with deterministic acknowledgement semantics.
+
+## EA ↔ Counterparty Web API Contract
+The EA communicates with the Rust counterparty service through a strict Web API protocol. Sessions are authenticated per EA account, only one EA connection is allowed at a time, and every message requires an acknowledgement so that pending events are removed once delivered.
+
+### Authentication & Session Control
+- **Account-scoped authentication** – The EA authenticates by issuing `POST /trade-agent/v1/sessions` with the `X-TradeAgent-Account` header and a shared secret payload. Successful calls return a short-lived session token that the EA presents on subsequent requests (typically through `Authorization: Bearer <token>`). Requests that omit the header are rejected with HTTP 400.
+- **First-come session leasing** – Only one active session per account is permitted. When a valid session already exists, additional `POST /trade-agent/v1/sessions` attempts receive HTTP 409 (Conflict) with metadata that instructs the EA to retry after the configured TTL or prompt the user to terminate the other session. The first authenticated EA retains the lease until it explicitly calls `DELETE /trade-agent/v1/sessions/current` or the lease expires.
+- **Idempotent handshakes** – Session creation calls must include an `Idempotency-Key` header so that network retries return the original token without spawning duplicate sessions. Session revocation (`DELETE /trade-agent/v1/sessions/current`) also honors the header to avoid premature release if the EA retries.
+
+### Counterparty → EA Event Outbox
+- **Polling interface** – The EA retrieves counterparty events (e.g., `trade.started`, `trade.partial_close`, `trade.closed`) via `GET /trade-agent/v1/sessions/current/outbox?cursor=<sequence>`. Responses include an ordered list of pending events with monotonic sequence IDs to satisfy the deterministic ordering rule in `AGENTS.md`.
+- **Acknowledgement workflow** – After processing an event, the EA confirms delivery using `POST /trade-agent/v1/sessions/current/outbox/{eventId}/ack`. The counterparty service marks the event as completed and removes it from the outbox so that acknowledged messages never reappear. Missing acknowledgements cause the event to remain pending for replay on the next poll.
+- **Real-time hints** – The counterparty service MAY include a `retryAfter` field in outbox responses to advise the EA on back-off when no events are available. This keeps polling costs minimal without introducing additional transports.
+
+### EA → Counterparty Event Inbox
+- **EA telemetry endpoint** – The EA reports its automation status, available currency pairs, heartbeat state, and broker-side updates by calling `POST /trade-agent/v1/sessions/current/inbox`. Each payload is tagged with an `eventType` such as `ea.symbol_catalog`, `ea.autotrade_status`, or `ea.execution_notice`.
+- **Message durability** – Inbox submissions require both `X-TradeAgent-Account` and `Idempotency-Key` headers. The counterparty service persists the payload until downstream consumers (e.g., management workflows or audit storage) mark completion. Duplicate submissions return the original response to prevent double processing.
+- **Acknowledgement semantics** – Event acknowledgements flow through the dedicated outbox ACK endpoint described above. When the EA posts `POST /trade-agent/v1/sessions/current/outbox/{eventId}/ack`, the counterparty service deletes the referenced outbox message immediately so it is never delivered twice.
 
 ## Managed Platform Strategy
 All persistent or stateful resources use managed Azure services so that infrastructure remains low-touch and pay-as-you-go.
@@ -99,6 +117,11 @@ The Rust counterparty service handles synchronous trade execution, while Azure F
 
 | Method | Path | Component | Description |
 |--------|------|-----------|-------------|
+| `POST` | `/trade-agent/v1/sessions` | Rust Counterparty Service (App Service) | Establish an authenticated EA session using the account-scoped key; first session wins while additional attempts receive HTTP 409. |
+| `DELETE` | `/trade-agent/v1/sessions/current` | Rust Counterparty Service (App Service) | Release the active EA session lease; requires the same headers and idempotency key used during creation. |
+| `GET` | `/trade-agent/v1/sessions/current/outbox` | Rust Counterparty Service (App Service) | Poll for pending counterparty events (trade started/partial/full close) with ordered sequence IDs. |
+| `POST` | `/trade-agent/v1/sessions/current/outbox/{eventId}/ack` | Rust Counterparty Service (App Service) | Acknowledge receipt so the referenced outbox event is removed and not redelivered. |
+| `POST` | `/trade-agent/v1/sessions/current/inbox` | Rust Counterparty Service (App Service) | Push EA-originated events such as acknowledgements, available currency pairs, and automation state updates. |
 | `POST` | `/trade-agent/v1/signals` | Rust Counterparty Service (App Service) | Receive EA trade intents; validate headers and trigger immediate copy trades before queuing follow-up events. |
 | `POST` | `/trade-agent/v1/executions` | Rust Counterparty Service (App Service) | Record broker execution callbacks with idempotent handling and emit reconciliation messages. |
 | `GET` | `/trade-agent/v1/health` | Rust Counterparty Service (App Service) | Publish readiness checks covering downstream dependencies. |
