@@ -1,0 +1,19 @@
+# Rust
+/target
+**/target/
+
+# .NET
+bin/
+obj/
+
+# Azure Functions local settings
+local.settings.json
+**/local.settings.json
+
+# Node/npm
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
