@@ -1,0 +1,15 @@
+bin/
+obj/
+.local.settings.json
+local.settings.json
+.vscode/
+*.user
+*.swp
+
+# Azure Functions artifacts
+.secrets/
+.data/
+
+# Tools
+node_modules/
+
