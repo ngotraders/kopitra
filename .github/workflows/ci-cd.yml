@@ -2,6 +2,8 @@ name: CI/CD Placeholder
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches: [ main ]
 
@@ -9,8 +11,32 @@ permissions:
   contents: read
 
 jobs:
-  rust:
-    name: Rust checks
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.filter.outputs.gateway }}
+      functions: ${{ steps.filter.outputs.functions }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        name: Filter paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            gateway:
+              - 'gateway/**'
+            functions:
+              - 'functions/**'
+
+  gateway:
+    name: Gateway pipeline
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -27,14 +53,17 @@ jobs:
           override: true
 
       - name: Rust format check
+        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo fmt --all -- --check
 
       - name: Rust linting (clippy)
+        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Rust build
+        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo build --all-targets --locked
 
@@ -42,8 +71,14 @@ jobs:
         working-directory: gateway
         run: cargo test --all --locked
 
-  dotnet:
-    name: .NET checks
+      - name: Deploy gateway
+        if: github.event_name != 'pull_request'
+        run: echo "Deploying gateway package..."
+
+  functions:
+    name: Functions pipeline
+    needs: changes
+    if: needs.changes.outputs.functions == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -56,17 +91,30 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore .NET dependencies
+        if: github.event_name != 'pull_request'
         working-directory: functions
         run: dotnet restore Functions.sln
 
       - name: .NET format check
+        if: github.event_name != 'pull_request'
         working-directory: functions
         run: dotnet format Functions.sln --verify-no-changes --verbosity minimal
 
       - name: .NET build
+        if: github.event_name != 'pull_request'
         working-directory: functions
         run: dotnet build Functions.sln --no-restore
 
-      - name: .NET tests
+      - name: Run .NET tests (PR)
+        if: github.event_name == 'pull_request'
+        working-directory: functions
+        run: dotnet test Functions.sln
+
+      - name: Run .NET tests (push)
+        if: github.event_name != 'pull_request'
         working-directory: functions
         run: dotnet test Functions.sln --no-build
+
+      - name: Deploy functions
+        if: github.event_name != 'pull_request'
+        run: echo "Deploying functions app..."
