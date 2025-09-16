@@ -171,6 +171,28 @@ Before working with the platform, ensure you have the following:
 - **Resilience Upgrades** – Implement multi-region active-active deployment with traffic manager failover.
 - **Developer Experience** – Provide Terraform modules, VS Code dev containers, and seed data generators for onboarding.
 
+### Rust gateway service
+Run the same checks as CI from within the crate directory:
+
+```bash
+cd gateway
+cargo fmt --all
+cargo clippy --all-targets --all-features -- -D warnings
+cargo build --all-targets --locked
+cargo test --all --locked
+```
+
+### .NET functions
+Restore packages once and then run the validation commands:
+
+```bash
+cd functions
+dotnet restore Functions.sln
+dotnet format Functions.sln --verify-no-changes --verbosity minimal
+dotnet build Functions.sln --no-restore
+dotnet test Functions.sln --no-build
+```
+
 ## References
 - [Azure Well-Architected Framework](https://learn.microsoft.com/azure/architecture/framework/)
 - [Azure API Management Documentation](https://learn.microsoft.com/azure/api-management/)

@@ -2,12 +2,15 @@ name: CI/CD Placeholder
 
 on:
   push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  rust:
+    name: Rust checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -15,11 +18,55 @@ jobs:
       - name: Placeholder build step
         run: echo "Building services..."
 
-  lint:
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: rustfmt, clippy
+          override: true
+
+      - name: Rust format check
+        working-directory: gateway
+        run: cargo fmt --all -- --check
+
+      - name: Rust linting (clippy)
+        working-directory: gateway
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Rust build
+        working-directory: gateway
+        run: cargo build --all-targets --locked
+
+      - name: Rust tests
+        working-directory: gateway
+        run: cargo test --all --locked
+
+  dotnet:
+    name: .NET checks
     runs-on: ubuntu-latest
-    needs: build
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Placeholder lint step
-        run: echo "Running linters..."
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore .NET dependencies
+        working-directory: functions
+        run: dotnet restore Functions.sln
+
+      - name: .NET format check
+        working-directory: functions
+        run: dotnet format Functions.sln --verify-no-changes --verbosity minimal
+
+      - name: .NET build
+        working-directory: functions
+        run: dotnet build Functions.sln --no-restore
+
+      - name: .NET tests
+        working-directory: functions
+        run: dotnet test Functions.sln --no-build
