@@ -4,14 +4,14 @@
 Kopitra enables copy trading by synchronizing positions from a master trader to follower portfolios. The development scope for this repository is limited to four deliverables that form the core runtime:
 
 1. **Expert Advisor (EA)** that runs on the trader's terminal and emits trade signals plus telemetry.
-2. **Rust Counterparty Service** that terminates EA requests, validates payloads, and forwards executable orders.
-3. **Management Server API** that provides authenticated configuration and monitoring endpoints for operators.
-4. **Web Frontend** that surfaces administrative workflows, dashboards, and operational tooling.
+2. **Rust Counterparty Service** hosted on Azure App Service that terminates EA requests, validates payloads, and executes copy trades.
+3. **Management Server API** implemented with Azure Functions to provide authenticated configuration, monitoring endpoints, and background automation.
+4. **Web Frontend** delivered via Azure Static Web Apps (or equivalent) that surfaces administrative workflows, dashboards, and operational tooling.
 
-The objective is to build these components with a cost-efficient footprint while relying on managed storage so that operational overhead remains low.
+The objective is to build these components with a serverless-first, cost-efficient footprint while relying on managed storage so that operational overhead remains low.
 
 ## Architecture Blueprint
-The following topology keeps containerized workloads lightweight while delegating data persistence to managed services.
+The reference topology pairs a minimal Azure App Service footprint with serverless compute so that continuous spend is limited to the Rust counterparty service.
 
 ```mermaid
 flowchart LR
@@ -19,75 +19,94 @@ flowchart LR
         EA[Expert Advisor]
     end
 
-    subgraph Services[Containerized Services]
+    subgraph AppService[Azure App Service (Linux)]
         RustSvc[Rust Counterparty Service]
-        AdminAPI[Management Server API]
+    end
+
+    subgraph Functions[Azure Functions (Consumption)]
+        AdminAPI[Management API & Jobs]
+    end
+
+    subgraph StaticWeb[Azure Static Web Apps]
         WebFE[Web Frontend]
     end
 
     subgraph Managed[Managed Azure Services]
-        DB[(Azure Database for PostgreSQL - Flexible Server)]
-        Storage[(Azure Storage - Blob/Table/Queue)]
+        DB[(Azure SQL Database - Serverless)]
+        Bus[(Azure Service Bus Queue/Topic)]
+        Storage[(Azure Storage - Blob/Table)]
         Monitor[(Azure Monitor & Application Insights)]
     end
 
     EA -->|Orders & Telemetry| RustSvc
-    RustSvc -->|RPC/REST| AdminAPI
+    RustSvc -->|Copy Trade Execution| Brokers[(Broker APIs)]
+    RustSvc -->|Config & State| DB
+    RustSvc -->|Event Fan-out| Bus
+    AdminAPI -->|Operations Events| Bus
     WebFE -->|HTTPS| AdminAPI
     AdminAPI --> DB
     AdminAPI --> Storage
-    RustSvc --> Storage
+    Bus -->|Queue Triggers| AdminAPI
     AdminAPI -.metrics.-> Monitor
     RustSvc -.metrics.-> Monitor
 ```
 
 ### Component Responsibilities
 - **Expert Advisor** – Publishes trade intentions, receives execution callbacks, and handles retry logic with idempotency keys.
-- **Rust Counterparty Service** – Offers low-latency ingestion of EA messages, normalizes broker payloads, and enforces the required request headers.
-- **Management Server API** – Hosts secure configuration endpoints, audit reporting, and task automation for operators.
-- **Web Frontend** – Provides dashboards to observe synchronization health, manage accounts, and trigger administrative actions.
+- **Rust Counterparty Service** – Runs on Azure App Service, terminates EA traffic, executes copy trades within the service boundary, normalizes broker payloads, and enforces the required request headers.
+- **Management Server API** – Azure Functions exposing HTTP, timer, and Service Bus triggered functions for configuration, audit reporting, and operational automation.
+- **Web Frontend** – Deployed to Azure Static Web Apps, provides dashboards to observe synchronization health, manage accounts, and trigger administrative actions through the Functions API.
 
-## Managed Storage Strategy
-To comply with the requirement that all persistent data uses managed storage, the baseline stack is:
+Copy-trade replication completes inside the Rust counterparty service to keep latency predictable; Service Bus queues carry only secondary events such as audit trail enrichment, alerting, and configuration tasks.
+
+## Managed Platform Strategy
+All persistent or stateful resources use managed Azure services so that infrastructure remains low-touch and pay-as-you-go.
 
 | Use Case | Service | Notes |
 |----------|---------|-------|
-| Relational data (accounts, trade history, configuration) | **Azure Database for PostgreSQL Flexible Server** | Serverless tier auto-pauses when idle, reducing runtime spend while preserving high availability options. |
+| Relational data (accounts, trade history, configuration) | **Azure SQL Database (Serverless, Hyperscale optional)** | Auto-pause at 1 hour idle keeps spend low while still offering burst capacity for busy sessions. |
+| Event fan-out, automation triggers | **Azure Service Bus (Basic tier queue or topic)** | Provides ordered delivery for EA-generated events that Azure Functions consume for operational tasks. |
 | File and report artifacts | **Azure Blob Storage** | Stores EA logs, generated reports, and downloadable audit bundles with lifecycle policies for cold storage. |
-| Queues and background workflows | **Azure Queue Storage** (or Service Bus Basic if ordering guarantees are required) | Managed messaging ensures EA retries and operational tasks do not require bespoke brokers. |
-| Caching and transient state | **Azure Cache for Redis (Basic tier)** | Optional component for accelerating dashboard reads; can be paused in lower environments. |
+| Secrets and app configuration | **Azure Key Vault & App Configuration** | Centralized secret rotation and feature flags; Functions and App Service use managed identity for access. |
+| Telemetry and diagnostics | **Azure Monitor with Application Insights** | Consolidates logs, metrics, and distributed traces without managing ingestion pipelines. |
 
 ## Cost-Optimized Deployment Plan
-The platform favours approaches that avoid recurring spend until workloads are active, while still allowing an AKS-based deployment if costs stay near USD 50 per month.
+The default posture minimizes always-on compute by leaning on Azure Functions and serverless databases. Azure App Service hosts the latency-sensitive Rust workload while remaining within a modest monthly budget.
 
-### Local & Developer Environments
-- Use Docker Compose or Podman to run the Rust service, management API, and frontend locally. Bind the EA to the local stack through secure tunnels when required.
-- For data stores, connect to Azure-managed instances provisioned in a dev resource group; enable serverless auto-pause so that inactive periods incur minimal cost.
-- Developers can fall back to containerized emulators (Azurite, PostgreSQL) for offline work, but production-equivalent testing should target managed resources.
+### Baseline Cloud Footprint (Production)
+- **Azure App Service (Linux, B1)** – Runs the Rust counterparty service with reserved capacity (~USD 13/month) and supports custom domains plus managed identity.
+- **Azure Functions (Consumption)** – Handles the management API and background jobs; cost scales with execution count and typically stays in the free grant for low traffic.
+- **Azure SQL Database (Serverless, S0/S1)** – Configure auto-pause at 1 hour and max vCores aligned to expected concurrency (~USD 10–30/month depending on activity).
+- **Azure Service Bus (Basic)** – Queues EA events for asynchronous processing (~USD 1/month) while guaranteeing ordered delivery.
+- **Azure Static Web Apps (Free/Standard)** – Hosts the management frontend with integrated authentication and global CDN (~USD 0–9/month depending on tier).
+- **Shared Services** – Application Insights, Blob Storage, and Key Vault add minimal base charges and scale with actual usage.
+
+With this mix, monthly spend typically remains under USD 50 when workloads are sporadic; scale-up paths (Premium Functions plan, App Service scaling, larger SQL tiers) are deferred until copy-trade volume justifies the cost.
 
 ### Shared Development / Staging
-- Deploy all services to a **single-node AKS cluster** on a burstable B-series VM (e.g., B4ms) with cluster auto-stop scripts. With spot pricing and nightly shutdown, monthly spend stays near the USD 50 threshold.
-- Alternatively, use **Azure Container Apps** for the Rust service, management API, and frontend when compute demand is low; scale to zero keeps idle costs negligible.
-- Continuous integration publishes container images to Azure Container Registry (ACR) and rolls them out via GitHub Actions workflows.
+- Reuse the production-grade Azure SQL serverless instance with short auto-pause windows or deploy a smaller S0 database per environment.
+- Host the Rust service on a lower-tier App Service plan (B1) shared across dev and staging slots; use deployment slots for blue/green validation.
+- Deploy Azure Functions to the same resource group using staged slots, and enable Service Bus queues with lower message TTL to manage costs.
+- Cache-busting builds of the Static Web App run through GitHub Actions on each merge, providing parity with production without idle charges.
 
-### Production Considerations
-- Scale AKS to multiple nodes only when live trading volume requires redundancy; otherwise keep a minimal node pool with horizontal pod autoscaling.
-- Enable Azure Monitor alerts on EA connectivity, order latency, and API failures; route incidents through PagerDuty or Teams.
-- Configure backup policies for PostgreSQL and Blob Storage with geo-redundant replication to satisfy compliance needs.
+### Local & Developer Environments
+- Run the Rust counterparty service via `cargo run` or Docker locally while authenticating against Azure SQL using a developer firewall rule.
+- Use the Azure Functions Core Tools to emulate HTTP and Service Bus triggers, falling back to Azurite for offline queue/blob development.
+- Point the EA to a local tunnel (e.g., `ngrok`, Azure Dev Tunnels) that forwards into the developer instance of the Rust service for end-to-end tests.
 
 ## API Surface & Data Flows
-The Rust counterparty service and management API collaborate to process trades and expose operational controls.
+The Rust counterparty service handles synchronous trade execution, while Azure Functions expose management surfaces and process asynchronous events from Service Bus.
 
 | Method | Path | Component | Description |
 |--------|------|-----------|-------------|
-| `POST` | `/trade-agent/v1/signals` | Rust Counterparty Service | Receive EA trade intents; validate headers and forward to execution pipeline. |
-| `POST` | `/trade-agent/v1/executions` | Rust Counterparty Service | Record broker execution callbacks with idempotent handling. |
-| `GET` | `/trade-agent/v1/health` | Rust Counterparty Service | Publish readiness checks covering downstream dependencies. |
-| `GET` | `/admin/v1/accounts` | Management Server API | List managed accounts, entitlements, and linked brokers. |
-| `POST` | `/admin/v1/tasks/{taskId}/run` | Management Server API | Trigger operational automations (e.g., resync follower). |
-| `GET` | `/admin/v1/audit/runs/{runId}` | Management Server API | Retrieve full execution trace for compliance review. |
+| `POST` | `/trade-agent/v1/signals` | Rust Counterparty Service (App Service) | Receive EA trade intents; validate headers and trigger immediate copy trades before queuing follow-up events. |
+| `POST` | `/trade-agent/v1/executions` | Rust Counterparty Service (App Service) | Record broker execution callbacks with idempotent handling and emit reconciliation messages. |
+| `GET` | `/trade-agent/v1/health` | Rust Counterparty Service (App Service) | Publish readiness checks covering downstream dependencies. |
+| `POST` | `/api/admin/tasks/{taskId}/run` | Management Server API (HTTP-triggered Function) | Trigger operational automations (e.g., resync follower) that may enqueue Service Bus jobs. |
+| `GET` | `/api/admin/accounts` | Management Server API (HTTP-triggered Function) | List managed accounts, entitlements, and linked brokers from Azure SQL. |
+| `Service Bus` | `trade-agent-events` | Management Server API (Service Bus-triggered Function) | Processes EA counterparty events (audit, notifications, anomaly detection) asynchronously. |
 
-WebSocket or SignalR hubs can supplement the HTTP API for live dashboard updates without maintaining custom socket servers.
+SignalR bindings on Azure Functions can supplement the HTTP API for live dashboard updates without maintaining custom socket servers.
 
 ## Development Workflow
 1. **Clone the Repository**
@@ -99,11 +118,23 @@ WebSocket or SignalR hubs can supplement the HTTP API for live dashboard updates
    - Copy `.env.sample` files for the Rust service, management API, and frontend. Populate broker credentials, managed storage connection strings, and EA authentication secrets.
    - Store secrets in Azure Key Vault and access them locally via `az keyvault secret show` to avoid plaintext storage.
 3. **Install Tooling**
-   - Docker or Podman, Rust toolchain (`rustup`), .NET 8 SDK, Node.js 18+, Azure CLI, and Terraform/Bicep for infrastructure changes.
+   - Rust toolchain (`rustup`), Azure Functions Core Tools, .NET 8 SDK (for Functions), Node.js 18+, Docker (optional), Azure CLI, and Terraform/Bicep for infrastructure changes.
 4. **Run Services Locally**
    ```bash
-   docker compose up rust-gateway admin-api web-frontend
-   # Launch the EA within its trading terminal and point it to http://localhost:8080
+   # Rust counterparty service
+   cd gateway
+   cargo run --bin trade-agent
+
+   # Management API (Azure Functions)
+   cd ../functions
+   func start --csharp
+
+   # Web frontend
+   cd ../opsconsole
+   npm install
+   npm run dev
+
+   # Launch the EA within its trading terminal and point it to http://localhost:8080 (or tunnel to Functions/App Service endpoints)
    ```
 5. **Execute Tests & Linters**
    - Rust gateway:
@@ -114,7 +145,7 @@ WebSocket or SignalR hubs can supplement the HTTP API for live dashboard updates
      cargo build --all-targets --locked
      cargo test --all --locked
      ```
-   - .NET management API (Azure Functions):
+   - Azure Functions management API:
      ```bash
      cd functions
      dotnet restore Functions.sln
@@ -137,13 +168,13 @@ WebSocket or SignalR hubs can supplement the HTTP API for live dashboard updates
    az deployment sub create \
      --location japaneast \
      --template-file infra/main.bicep \
-     --parameters env=dev acrName=<acr-name> aksSku=basic
+     --parameters env=dev appServicePlanSku=B1 sqlAutoPauseDelay=60
    ```
 
 ## Monitoring & Operations
 - **Logging** – Emit structured JSON logs to Azure Monitor; configure Log Analytics workspaces with cost caps and retention policies aligned to compliance SLAs.
 - **Metrics** – Track signal ingestion latency, EA uptime, and order reconciliation success. Set thresholds for proactive paging.
-- **Runbooks** – Document EA failover, AKS node recovery, and managed storage restoration procedures. Store runbooks alongside infrastructure-as-code for version control.
+- **Runbooks** – Document EA failover, App Service slot recovery, Azure Functions queue draining, and managed storage restoration procedures. Store runbooks alongside infrastructure-as-code for version control.
 
 ## Roadmap Highlights
 - Harden EA connectivity with circuit breakers and offline buffering.
@@ -151,7 +182,8 @@ WebSocket or SignalR hubs can supplement the HTTP API for live dashboard updates
 - Expand broker integrations incrementally, gating each behind feature flags in the management API.
 
 ## References
-- [Azure Kubernetes Service Documentation](https://learn.microsoft.com/azure/aks/)
-- [Azure Database for PostgreSQL Flexible Server](https://learn.microsoft.com/azure/postgresql/flexible-server/overview)
-- [Azure Container Apps Documentation](https://learn.microsoft.com/azure/container-apps/)
-- [Azure Storage Overview](https://learn.microsoft.com/azure/storage/common/storage-introduction)
+- [Azure App Service Documentation](https://learn.microsoft.com/azure/app-service/)
+- [Azure Functions Documentation](https://learn.microsoft.com/azure/azure-functions/)
+- [Azure SQL Database Serverless](https://learn.microsoft.com/azure/azure-sql/database/serverless-tier-overview)
+- [Azure Service Bus Documentation](https://learn.microsoft.com/azure/service-bus-messaging/)
+- [Azure Static Web Apps Documentation](https://learn.microsoft.com/azure/static-web-apps/)
