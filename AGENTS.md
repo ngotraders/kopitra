@@ -4,6 +4,8 @@ These instructions govern changes within this repository. When modifying or exte
 
 ## Documentation Language
 - Author all repository documentation in English, even when implementation requests are delivered in Japanese.
+- Capture any remaining Expert Advisor follow-up tasks in `ea/TODO.md` so contributors can track platform-specific backlog in a
+  single location.
 
 ## AgentMode
 - TradeAgentEA operates in **synchronous relay** mode by default. Signals received must be validated and dispatched to broker endpoints within the same request lifecycle.
