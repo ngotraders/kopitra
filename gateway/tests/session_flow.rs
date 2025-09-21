@@ -145,6 +145,82 @@ async fn session_auth_flow_emits_init_ack() {
 }
 
 #[tokio::test]
+async fn preapproved_session_is_immediately_authenticated() {
+    let state = AppState::default();
+    let account = "acct-preapproved";
+    let auth_key = "preapproved-secret";
+
+    state
+        .preapprove_session_key(
+            account,
+            AuthMethod::AccountSessionKey,
+            auth_key,
+            Some("ops-console".to_string()),
+            None,
+        )
+        .await
+        .expect("pre-approval registration should succeed");
+
+    let app = router(state.clone());
+    let create_idempotency = Uuid::new_v4().to_string();
+
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authMethod": "account_session_key",
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create session request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created.status, SessionStatus::Authenticated);
+    assert!(!created.pending);
+    assert_eq!(created.auth_method, AuthMethod::AccountSessionKey);
+    assert!(created.previous_session_terminated.is_none());
+
+    let session_token = created.session_token;
+
+    let outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build outbox request");
+
+    let (status, outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(outbox.session_id, created.session_id);
+    assert!(!outbox.pending);
+    assert_eq!(outbox.events.len(), 1);
+
+    let init_ack = &outbox.events[0];
+    assert_eq!(init_ack.sequence, 1);
+    assert_eq!(init_ack.event_type, "InitAck");
+    assert!(init_ack.requires_ack);
+}
+
+#[tokio::test]
 async fn pending_session_ingests_events_and_remains_pending() {
     let app = router(AppState::default());
     let account = "acct-003";

@@ -105,6 +105,7 @@ struct AccountSessions {
     sessions_by_token: HashMap<Uuid, SessionRecord>,
     active_index: HashMap<String, Uuid>,
     session_index: HashMap<Uuid, Uuid>,
+    preapproved: HashMap<String, PreapprovalRecord>,
 }
 
 impl AccountSessions {
@@ -153,7 +154,35 @@ impl AccountSessions {
     }
 
     fn is_empty(&self) -> bool {
-        self.sessions_by_token.is_empty()
+        self.sessions_by_token.is_empty() && self.preapproved.is_empty()
+    }
+
+    fn register_preapproval(&mut self, fingerprint: String, record: PreapprovalRecord) {
+        self.preapproved.insert(fingerprint, record);
+    }
+
+    fn consume_preapproval(&mut self, fingerprint: &str) -> Option<PreapprovalRecord> {
+        let record = self.preapproved.remove(fingerprint)?;
+        if record.is_expired(current_time()) {
+            None
+        } else {
+            Some(record)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PreapprovalRecord {
+    approved_by: Option<String>,
+    expires_at: Option<OffsetDateTime>,
+}
+
+impl PreapprovalRecord {
+    fn is_expired(&self, now: OffsetDateTime) -> bool {
+        match self.expires_at {
+            Some(expiry) => expiry <= now,
+            None => false,
+        }
     }
 }
 
@@ -164,6 +193,49 @@ impl AppState {
 
     async fn store_response(&self, key: String, stored: StoredResponse) {
         self.inner.lock().await.idempotency.insert(key, stored);
+    }
+
+    pub async fn preapprove_session_key(
+        &self,
+        account: &str,
+        auth_method: AuthMethod,
+        authentication_key: &str,
+        approved_by: Option<String>,
+        expires_at: Option<OffsetDateTime>,
+    ) -> Result<(), AdminCommandError> {
+        if authentication_key.trim().is_empty() {
+            return Err(AdminCommandError::AuthenticationKeyEmpty);
+        }
+
+        let fingerprint = hash_secret(auth_method, authentication_key, account);
+        let mut inner = self.inner.lock().await;
+        let account_sessions = inner.sessions.entry(account.to_string()).or_default();
+
+        match approved_by.as_deref() {
+            Some(operator) if !operator.is_empty() => {
+                info!(
+                    account = %account,
+                    operator,
+                    auth_method = ?auth_method,
+                    "registered pre-approved authentication key",
+                );
+            }
+            _ => info!(
+                account = %account,
+                auth_method = ?auth_method,
+                "registered pre-approved authentication key",
+            ),
+        }
+
+        account_sessions.register_preapproval(
+            fingerprint,
+            PreapprovalRecord {
+                approved_by,
+                expires_at,
+            },
+        );
+
+        Ok(())
     }
 
     pub async fn promote_session_with_secret(
@@ -983,7 +1055,32 @@ async fn create_session(
         info!(account = %account, previous_session = %previous, "preempting previous session");
     }
 
-    let session = SessionRecord::new(payload.auth_method, auth_hash.clone());
+    let mut session = SessionRecord::new(payload.auth_method, auth_hash.clone());
+
+    if let Some(preapproval) = account_sessions.consume_preapproval(&auth_hash) {
+        match session.promote(&auth_hash) {
+            Ok(_) => match preapproval.approved_by.as_deref() {
+                Some(operator) if !operator.is_empty() => info!(
+                    account = %account,
+                    session = %session.session_id,
+                    operator,
+                    "session authenticated via pre-approval",
+                ),
+                _ => info!(
+                    account = %account,
+                    session = %session.session_id,
+                    "session authenticated via pre-approval",
+                ),
+            },
+            Err(error) => warn!(
+                account = %account,
+                session = %session.session_id,
+                %error,
+                "failed to promote pre-approved session",
+            ),
+        }
+    }
+
     let response_body = session.to_create_response(previous_session_id);
 
     let stored = StoredResponse::from_json(StatusCode::CREATED, &response_body)
