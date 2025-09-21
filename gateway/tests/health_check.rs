@@ -1,4 +1,4 @@
-use gateway::{health_check, HealthStatus};
+use gateway::{HealthStatus, health_check};
 
 #[test]
 fn reports_gateway_component_health() {

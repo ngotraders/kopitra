@@ -2,6 +2,11 @@
 
 These instructions govern changes within this repository. When modifying or extending functionality, ensure that TradeAgentEA continues to satisfy the requirements below.
 
+## Documentation Language
+- Author all repository documentation in English, even when implementation requests are delivered in Japanese.
+- Capture any remaining Expert Advisor follow-up tasks in `ea/TODO.md` so contributors can track platform-specific backlog in a
+  single location.
+
 ## AgentMode
 - TradeAgentEA operates in **synchronous relay** mode by default. Signals received must be validated and dispatched to broker endpoints within the same request lifecycle.
 - A **deferred replay** mode MAY be enabled for backfill operations. Code enabling this path MUST gate the feature behind an explicit configuration flag and document the associated runbook.
