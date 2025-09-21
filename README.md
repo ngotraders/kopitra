@@ -115,19 +115,26 @@ With this mix, monthly spend typically remains under USD 50 when workloads are s
 ## API Surface & Data Flows
 The Rust counterparty service handles synchronous trade execution, while Azure Functions expose management surfaces and process asynchronous events from Service Bus.
 
-| Method | Path | Component | Description |
-|--------|------|-----------|-------------|
-| `POST` | `/trade-agent/v1/sessions` | Rust Counterparty Service (App Service) | Establish an authenticated EA session using the account-scoped key; first session wins while additional attempts receive HTTP 409. |
-| `DELETE` | `/trade-agent/v1/sessions/current` | Rust Counterparty Service (App Service) | Release the active EA session lease; requires the same headers and idempotency key used during creation. |
-| `GET` | `/trade-agent/v1/sessions/current/outbox` | Rust Counterparty Service (App Service) | Poll for pending counterparty events (trade started/partial/full close) with ordered sequence IDs. |
-| `POST` | `/trade-agent/v1/sessions/{sessionId}/orders` | Rust Counterparty Service (App Service) | Instruct a specific EA session to open or close positions by queuing `OrderCommand` events with the desired instrument, side, size, and optional execution constraints. |
-| `POST` | `/trade-agent/v1/sessions/current/inbox` | Rust Counterparty Service (App Service) | Push EA-originated events such as acknowledgements (`OutboxAck`), available currency pairs, and automation state updates. |
-| `POST` | `/trade-agent/v1/signals` | Rust Counterparty Service (App Service) | Receive EA trade intents; validate headers and trigger immediate copy trades before queuing follow-up events. |
-| `POST` | `/trade-agent/v1/executions` | Rust Counterparty Service (App Service) | Record broker execution callbacks with idempotent handling and emit reconciliation messages. |
-| `GET` | `/trade-agent/v1/health` | Rust Counterparty Service (App Service) | Publish readiness checks covering downstream dependencies. |
-| `POST` | `/api/admin/tasks/{taskId}/run` | Management Server API (HTTP-triggered Function) | Trigger operational automations (e.g., resync follower) that may enqueue Service Bus jobs. |
-| `GET` | `/api/admin/accounts` | Management Server API (HTTP-triggered Function) | List managed accounts, entitlements, and linked brokers from Azure SQL. |
-| `Service Bus` | `trade-agent-events` | Management Server API (Service Bus-triggered Function) | Processes EA counterparty events (audit, notifications, anomaly detection) asynchronously. |
+### EA-Facing HTTPS Endpoints (Rust Counterparty Service)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/trade-agent/v1/sessions` | Establish an authenticated EA session using the account-scoped key; first session wins while additional attempts receive HTTP 409. |
+| `DELETE` | `/trade-agent/v1/sessions/current` | Release the active EA session lease; requires the same headers and idempotency key used during creation. |
+| `GET` | `/trade-agent/v1/sessions/current/outbox` | Poll for pending counterparty events (trade started/partial/full close) with ordered sequence IDs. |
+| `POST` | `/trade-agent/v1/sessions/current/inbox` | Push EA-originated events such as acknowledgements (`OutboxAck`), available currency pairs, and automation state updates. |
+| `POST` | `/trade-agent/v1/signals` | Receive EA trade intents; validate headers and trigger immediate copy trades before queuing follow-up events. |
+| `POST` | `/trade-agent/v1/executions` | Record broker execution callbacks with idempotent handling and emit reconciliation messages. |
+| `GET` | `/trade-agent/v1/health` | Publish readiness checks covering downstream dependencies. |
+
+### Management Control Interfaces
+Management consoles must use the dedicated management plane described in [`docs/management-control.md`](docs/management-control.md).
+
+| Transport | Address | Hosting Component | Description |
+|-----------|---------|-------------------|-------------|
+| HTTPS | `POST /trade-agent/v1/sessions/{sessionId}/orders` | Rust Counterparty Service (management plane) | Instruct a specific EA session to open or close positions by queuing `OrderCommand` events. Authenticated EA traffic must not invoke this endpoint. |
+| HTTPS | `POST /api/admin/tasks/{taskId}/run` | Management Server API (HTTP-triggered Function) | Trigger operational automations (e.g., resync follower) that may enqueue Service Bus jobs. |
+| HTTPS | `GET /api/admin/accounts` | Management Server API (HTTP-triggered Function) | List managed accounts, entitlements, and linked brokers from Azure SQL. |
+| Service Bus | `trade-agent-events` | Management Server API (Service Bus-triggered Function) | Processes EA counterparty events (audit, notifications, anomaly detection) asynchronously. |
 
 SignalR bindings on Azure Functions can supplement the HTTP API for live dashboard updates without maintaining custom socket servers.
 
