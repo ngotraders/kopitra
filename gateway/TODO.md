@@ -2,7 +2,6 @@
 
 ## Session and Authentication Enhancements
 - [ ] Replace the in-memory session map with a persistent store shared across replicas.
-- [ ] Allow multiple authentication strategies (e.g., pre-shared keys, broker-issued tokens) selectable per account.
 - [ ] Enforce configurable idle session timeouts and surface metrics for heartbeat compliance.
 
 ## Event Pipeline Improvements

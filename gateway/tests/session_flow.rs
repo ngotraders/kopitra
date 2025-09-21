@@ -244,8 +244,8 @@ async fn pending_session_ingests_events_and_remains_pending() {
         "unexpected inbox status: {}",
         String::from_utf8_lossy(&inbox_body)
     );
-    let inbox: InboxResponsePayload = serde_json::from_slice(&inbox_body)
-        .expect("failed to deserialize inbox response");
+    let inbox: InboxResponsePayload =
+        serde_json::from_slice(&inbox_body).expect("failed to deserialize inbox response");
     assert_eq!(inbox.accepted, 2);
     assert!(inbox.pending_session);
 
@@ -364,12 +364,234 @@ async fn session_creation_is_idempotent_and_preempts_previous() {
         .body(Body::empty())
         .expect("failed to build stale token request");
 
+    let (status, stale_outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(stale_token_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!stale_outbox.pending);
+    assert_eq!(stale_outbox.events.len(), 1);
+    let shutdown = &stale_outbox.events[0];
+    assert_eq!(shutdown.event_type, "ShutdownNotice");
+    assert!(shutdown.requires_ack);
+    assert_eq!(
+        shutdown
+            .payload
+            .get("reason")
+            .and_then(|value| value.as_str()),
+        Some("session_preempted")
+    );
+}
+
+#[tokio::test]
+async fn terminated_session_rejects_inbox_submission() {
+    let app = router(AppState::default());
+    let account = "acct-004";
+    let auth_key = "one-time-secret";
+
+    let create_idempotency = Uuid::new_v4().to_string();
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create session request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let session_token = created.session_token;
+
+    let approve_idempotency = Uuid::new_v4().to_string();
+    let approve_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/approve",
+            created.session_id
+        ))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", approve_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build approve request");
+
+    let (status, _) = json_response::<SessionPromotionResponsePayload>(
+        app.clone()
+            .oneshot(approve_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let replacement_idempotency = Uuid::new_v4().to_string();
+    let replacement_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", replacement_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build replacement request");
+
+    let (status, _) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(replacement_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let inbox_idempotency = Uuid::new_v4().to_string();
+    let inbox_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions/current/inbox")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", inbox_idempotency.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::from(
+            json!({
+                "events": [{
+                    "eventType": "StatusHeartbeat",
+                    "payload": {"state": "terminated"}
+                }]
+            })
+            .to_string(),
+        ))
+        .expect("failed to build inbox request");
+
     let response = app
         .clone()
-        .oneshot(stale_token_request)
+        .oneshot(inbox_request)
         .await
         .expect("router error");
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body collection failed")
+        .to_bytes();
+    let error: ErrorResponsePayload =
+        serde_json::from_slice(&body).expect("failed to deserialize error response");
+    assert_eq!(error.code, "session_terminated");
+    assert!(
+        error.message.contains("terminated"),
+        "unexpected error message: {}",
+        error.message
+    );
+}
+
+#[tokio::test]
+async fn pre_shared_key_sessions_authenticate_successfully() {
+    let app = router(AppState::default());
+    let account = "acct-psk";
+    let auth_key = "shared-pre-key";
+
+    let create_idempotency = Uuid::new_v4().to_string();
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authMethod": "pre_shared_key",
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let approve_idempotency = Uuid::new_v4().to_string();
+    let approve_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/approve",
+            created.session_id
+        ))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", approve_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build approve request");
+
+    let (status, approved) = json_response::<SessionPromotionResponsePayload>(
+        app.clone()
+            .oneshot(approve_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(approved.session_id, created.session_id);
+    assert_eq!(approved.status, SessionStatus::Authenticated);
+
+    let outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(
+            header::AUTHORIZATION,
+            format!("Bearer {}", created.session_token),
+        )
+        .body(Body::empty())
+        .expect("failed to build outbox request");
+
+    let (status, outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(outbox.session_id, created.session_id);
+    assert_eq!(outbox.events.len(), 1);
+    assert_eq!(outbox.events[0].event_type, "InitAck");
 }
 
 async fn json_response<T>(response: Response) -> (StatusCode, T)
@@ -415,6 +637,7 @@ struct InboxResponsePayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OutboxResponsePayload {
+    session_id: Uuid,
     pending: bool,
     events: Vec<OutboxEventPayload>,
 }
@@ -425,7 +648,14 @@ struct OutboxEventPayload {
     id: Uuid,
     sequence: u64,
     event_type: String,
+    payload: serde_json::Value,
     requires_ack: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponsePayload {
+    code: String,
+    message: String,
 }
 
 #[derive(Debug, Deserialize)]

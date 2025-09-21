@@ -54,8 +54,59 @@ pub struct AppState {
 
 #[derive(Default)]
 struct SharedState {
-    sessions: HashMap<String, SessionRecord>,
+    sessions: HashMap<String, AccountSessions>,
     idempotency: HashMap<String, StoredResponse>,
+}
+
+#[derive(Default)]
+struct AccountSessions {
+    sessions_by_token: HashMap<Uuid, SessionRecord>,
+    active_index: HashMap<String, Uuid>,
+    session_index: HashMap<Uuid, Uuid>,
+}
+
+impl AccountSessions {
+    fn insert(&mut self, session: SessionRecord) {
+        let token = session.session_token;
+        let session_id = session.session_id;
+        let auth_hash = session.auth_key_hash.clone();
+
+        self.active_index.insert(auth_hash.clone(), token);
+        self.session_index.insert(session_id, token);
+        self.sessions_by_token.insert(token, session);
+    }
+
+    fn preempt_existing(&mut self, auth_hash: &str) -> Option<Uuid> {
+        let token = self.active_index.remove(auth_hash)?;
+        let session = self.sessions_by_token.get_mut(&token)?;
+        session.mark_terminated(TerminationReason::Preempted);
+        Some(session.session_id)
+    }
+
+    fn get_mut_by_token(&mut self, token: &Uuid) -> Option<&mut SessionRecord> {
+        self.sessions_by_token.get_mut(token)
+    }
+
+    fn get_mut_by_session_id(&mut self, session_id: &Uuid) -> Option<&mut SessionRecord> {
+        let token = self.session_index.get(session_id)?;
+        self.sessions_by_token.get_mut(token)
+    }
+
+    fn remove_by_token(&mut self, token: &Uuid) -> Option<SessionRecord> {
+        let session = self.sessions_by_token.remove(token)?;
+        self.session_index.remove(&session.session_id);
+        if matches!(
+            self.active_index.get(&session.auth_key_hash),
+            Some(stored) if stored == token
+        ) {
+            self.active_index.remove(&session.auth_key_hash);
+        }
+        Some(session)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.sessions_by_token.is_empty()
+    }
 }
 
 /// Health status payload emitted by the service.
@@ -229,11 +280,21 @@ impl SessionStatus {
 #[serde(rename_all = "snake_case")]
 pub enum AuthMethod {
     AccountSessionKey,
+    PreSharedKey,
 }
 
 impl Default for AuthMethod {
     fn default() -> Self {
         AuthMethod::AccountSessionKey
+    }
+}
+
+impl AuthMethod {
+    const fn storage_key(self) -> &'static str {
+        match self {
+            AuthMethod::AccountSessionKey => "account_session_key",
+            AuthMethod::PreSharedKey => "pre_shared_key",
+        }
     }
 }
 
@@ -372,6 +433,18 @@ struct SessionRecord {
     inbox_log: Vec<InboundEventRecord>,
 }
 
+enum TerminationReason {
+    Preempted,
+}
+
+impl TerminationReason {
+    const fn as_str(&self) -> &'static str {
+        match self {
+            TerminationReason::Preempted => "session_preempted",
+        }
+    }
+}
+
 impl SessionRecord {
     fn new(auth_method: AuthMethod, auth_key_hash: String) -> Self {
         let now = current_time();
@@ -410,6 +483,26 @@ impl SessionRecord {
     fn mark_authenticated(&mut self) {
         self.status = SessionStatus::Authenticated;
         self.updated_at = current_time();
+    }
+
+    fn mark_terminated(&mut self, reason: TerminationReason) {
+        if self.status == SessionStatus::Terminated {
+            return;
+        }
+
+        self.status = SessionStatus::Terminated;
+        let payload = json!({
+            "reason": reason.as_str(),
+            "terminatedAt": current_time(),
+        });
+
+        let request = OutboxEventRequest {
+            event_type: "ShutdownNotice".to_string(),
+            payload,
+            requires_ack: true,
+        };
+
+        self.enqueue_outbox(request);
     }
 
     fn enqueue_outbox(&mut self, event: OutboxEventRequest) -> OutboundEvent {
@@ -526,28 +619,24 @@ async fn create_session(
         ));
     }
 
-    let auth_hash = hash_secret(&payload.authentication_key, &account);
+    let auth_hash = hash_secret(payload.auth_method, &payload.authentication_key, &account);
 
     let mut inner = state.inner.lock().await;
+    let account_sessions = inner.sessions.entry(account.clone()).or_default();
 
-    let previous_session = inner.sessions.remove(&account);
-    let previous_session_id = previous_session.as_ref().map(|session| session.session_id);
+    let previous_session_id = account_sessions.preempt_existing(&auth_hash);
 
-    if let Some(previous) = previous_session {
-        info!(
-            account = %account,
-            previous_session = %previous.session_id,
-            "preempting previous session"
-        );
+    if let Some(previous) = previous_session_id {
+        info!(account = %account, previous_session = %previous, "preempting previous session");
     }
 
-    let session = SessionRecord::new(payload.auth_method, auth_hash);
+    let session = SessionRecord::new(payload.auth_method, auth_hash.clone());
     let response_body = session.to_create_response(previous_session_id);
 
     let stored = StoredResponse::from_json(StatusCode::CREATED, &response_body)
         .map_err(|error| ApiError::internal(error.to_string()))?;
 
-    inner.sessions.insert(account.clone(), session);
+    account_sessions.insert(session);
     inner.idempotency.insert(storage_key, stored.clone());
 
     info!(account = %account, session = %response_body.session_id, "session created");
@@ -581,25 +670,35 @@ async fn delete_session(
     }
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get(&account) else {
-        return Err(ApiError::unauthorized(
-            "session_missing",
-            "no active session for the supplied account",
-        ));
+
+    let (session_id, remove_account) = {
+        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
+            return Err(ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ));
+        };
+
+        let Some(session) = account_sessions.get_mut_by_token(&token) else {
+            return Err(ApiError::unauthorized(
+                "invalid_session_token",
+                "the provided session token is not valid for this account",
+            ));
+        };
+
+        let session_id = session.session_id;
+        account_sessions.remove_by_token(&token);
+        (session_id, account_sessions.is_empty())
     };
 
-    if session.session_token != token {
-        return Err(ApiError::unauthorized(
-            "invalid_session_token",
-            "the provided session token is not valid for this account",
-        ));
+    if remove_account {
+        inner.sessions.remove(&account);
     }
 
-    inner.sessions.remove(&account);
     let stored = StoredResponse::empty(StatusCode::NO_CONTENT);
     inner.idempotency.insert(storage_key, stored.clone());
 
-    info!(account = %account, "session deleted");
+    info!(account = %account, session = %session_id, "session deleted");
 
     Ok(stored.into_response())
 }
@@ -631,26 +730,40 @@ async fn ingest_inbox_events(
     }
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get_mut(&account) else {
-        return Err(ApiError::unauthorized(
-            "session_missing",
-            "no active session for the supplied account",
-        ));
+    let events = payload.events;
+
+    let (accepted, pending) = {
+        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
+            return Err(ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ));
+        };
+
+        let Some(session) = account_sessions.get_mut_by_token(&token) else {
+            return Err(ApiError::unauthorized(
+                "invalid_session_token",
+                "the provided session token is not valid for this account",
+            ));
+        };
+
+        if session.status == SessionStatus::Terminated {
+            return Err(ApiError::forbidden(
+                "session_terminated",
+                "the session has been terminated and no longer accepts events",
+            ));
+        }
+
+        let captured = session.capture_inbox(events);
+        let accepted = captured.len();
+        let pending = session.status.is_pending();
+        debug!(account = %account, captured = accepted, "captured inbox events");
+        (accepted, pending)
     };
 
-    if session.session_token != token {
-        return Err(ApiError::unauthorized(
-            "invalid_session_token",
-            "the provided session token is not valid for this account",
-        ));
-    }
-
-    let captured = session.capture_inbox(payload.events);
-    debug!(account = %account, captured = captured.len(), "captured inbox events");
-
     let response_body = InboxResponse {
-        accepted: captured.len(),
-        pending_session: session.status.is_pending(),
+        accepted,
+        pending_session: pending,
     };
 
     let stored = StoredResponse::from_json(StatusCode::ACCEPTED, &response_body)
@@ -670,28 +783,31 @@ async fn fetch_outbox_events(
     let token = bearer_token(&headers)?;
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get_mut(&account) else {
-        return Err(ApiError::unauthorized(
-            "session_missing",
-            "no active session for the supplied account",
-        ));
-    };
 
-    if session.session_token != token {
-        return Err(ApiError::unauthorized(
-            "invalid_session_token",
-            "the provided session token is not valid for this account",
-        ));
-    }
+    let response = {
+        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
+            return Err(ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ));
+        };
 
-    let cursor = query.cursor.unwrap_or_default();
-    let events = session.events_after(cursor, query.limit, false);
+        let Some(session) = account_sessions.get_mut_by_token(&token) else {
+            return Err(ApiError::unauthorized(
+                "invalid_session_token",
+                "the provided session token is not valid for this account",
+            ));
+        };
 
-    let response = OutboxResponse {
-        session_id: session.session_id,
-        pending: session.status.is_pending(),
-        events,
-        retry_after_ms: 1_000,
+        let cursor = query.cursor.unwrap_or_default();
+        let events = session.events_after(cursor, query.limit, false);
+
+        OutboxResponse {
+            session_id: session.session_id,
+            pending: session.status.is_pending(),
+            events,
+            retry_after_ms: 1_000,
+        }
     };
 
     Ok((StatusCode::OK, Json(response)).into_response())
@@ -724,30 +840,35 @@ async fn acknowledge_outbox_event(
     }
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get_mut(&account) else {
-        return Err(ApiError::unauthorized(
-            "session_missing",
-            "no active session for the supplied account",
-        ));
+
+    let remaining = {
+        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
+            return Err(ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ));
+        };
+
+        let Some(session) = account_sessions.get_mut_by_token(&token) else {
+            return Err(ApiError::unauthorized(
+                "invalid_session_token",
+                "the provided session token is not valid for this account",
+            ));
+        };
+
+        if !session.acknowledge_outbox(event_id) {
+            return Err(ApiError::not_found(
+                "event_not_found",
+                "no outbox event with the supplied identifier",
+            ));
+        }
+
+        session.outbox.len()
     };
-
-    if session.session_token != token {
-        return Err(ApiError::unauthorized(
-            "invalid_session_token",
-            "the provided session token is not valid for this account",
-        ));
-    }
-
-    if !session.acknowledge_outbox(event_id) {
-        return Err(ApiError::not_found(
-            "event_not_found",
-            "no outbox event with the supplied identifier",
-        ));
-    }
 
     let response_body = AckResponse {
         acknowledged_event_id: event_id,
-        remaining_outbox_depth: session.outbox.len(),
+        remaining_outbox_depth: remaining,
     };
 
     let stored = StoredResponse::from_json(StatusCode::OK, &response_body)
@@ -791,19 +912,19 @@ async fn approve_session(
     }
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get_mut(&account) else {
+    let Some(account_sessions) = inner.sessions.get_mut(&account) else {
         return Err(ApiError::unauthorized(
             "session_missing",
             "no active session for the supplied account",
         ));
     };
 
-    if session.session_id != session_id {
+    let Some(session) = account_sessions.get_mut_by_session_id(&session_id) else {
         return Err(ApiError::conflict(
             "session_mismatch",
             "the supplied session id does not match the active session",
         ));
-    }
+    };
 
     if payload.authentication_key.trim().is_empty() {
         return Err(ApiError::bad_request(
@@ -812,12 +933,19 @@ async fn approve_session(
         ));
     }
 
-    let auth_hash = hash_secret(&payload.authentication_key, &account);
+    let auth_hash = hash_secret(session.auth_method, &payload.authentication_key, &account);
 
     if !session.verify_secret(&auth_hash) {
         return Err(ApiError::forbidden(
             "authentication_failed",
             "the provided authentication key is invalid",
+        ));
+    }
+
+    if session.status == SessionStatus::Terminated {
+        return Err(ApiError::conflict(
+            "session_terminated",
+            "the session has been terminated and cannot be approved",
         ));
     }
 
@@ -888,17 +1016,24 @@ async fn queue_outbox_event(
     }
 
     let mut inner = state.inner.lock().await;
-    let Some(session) = inner.sessions.get_mut(&account) else {
+    let Some(account_sessions) = inner.sessions.get_mut(&account) else {
         return Err(ApiError::unauthorized(
             "session_missing",
             "no active session for the supplied account",
         ));
     };
 
-    if session.session_id != session_id {
+    let Some(session) = account_sessions.get_mut_by_session_id(&session_id) else {
         return Err(ApiError::conflict(
             "session_mismatch",
             "the supplied session id does not match the active session",
+        ));
+    };
+
+    if session.status == SessionStatus::Terminated {
+        return Err(ApiError::conflict(
+            "session_terminated",
+            "the session has been terminated and cannot accept outbox events",
         ));
     }
 
@@ -991,8 +1126,10 @@ fn idempotency_storage_key(method: &str, path: &str, account: &str, key: &str) -
     format!("{method}:{path}:{account}:{key}")
 }
 
-fn hash_secret(secret: &str, account: &str) -> String {
+fn hash_secret(method: AuthMethod, secret: &str, account: &str) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(method.storage_key().as_bytes());
+    hasher.update(b":");
     hasher.update(account.as_bytes());
     hasher.update(b":");
     hasher.update(secret.as_bytes());
@@ -1010,7 +1147,7 @@ mod tests {
     #[tokio::test]
     async fn session_enqueue_and_ack_flow() {
         let account = "12345".to_string();
-        let hash = hash_secret("secret", &account);
+        let hash = hash_secret(AuthMethod::AccountSessionKey, "secret", &account);
         let mut session = SessionRecord::new(AuthMethod::AccountSessionKey, hash);
 
         assert_eq!(session.status, SessionStatus::Pending);
@@ -1034,9 +1171,9 @@ mod tests {
 
     #[test]
     fn hashing_is_deterministic() {
-        let hash1 = hash_secret("secret", "account");
-        let hash2 = hash_secret("secret", "account");
-        let hash3 = hash_secret("secret", "other");
+        let hash1 = hash_secret(AuthMethod::AccountSessionKey, "secret", "account");
+        let hash2 = hash_secret(AuthMethod::AccountSessionKey, "secret", "account");
+        let hash3 = hash_secret(AuthMethod::AccountSessionKey, "secret", "other");
 
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, hash3);
