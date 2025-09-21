@@ -7,7 +7,7 @@
 
 input string InpApiBaseUrl            = "https://localhost:8080";
 input string InpAccountId             = "";
-input string InpAuthMethod            = "AccountSessionKey";
+input string InpAuthMethod            = "account_session_key";
 input string InpAuthKey               = "";
 input string InpDeviceId              = "";
 input int    InpHeartbeatSeconds      = 15;
@@ -23,9 +23,7 @@ void KopitraApplyInputConfig(KopitraConfig &config)
   {
    config.apiBaseUrl           = KopitraTrimString(InpApiBaseUrl);
    config.accountId            = KopitraTrimString(InpAccountId);
-   config.authMethod           = KopitraTrimString(InpAuthMethod);
-   if(StringLen(KopitraTrimString(config.authMethod))==0)
-      config.authMethod        = "AccountSessionKey";
+   config.authMethod           = KopitraNormalizeAuthMethod(InpAuthMethod);
    config.authKey              = KopitraTrimString(InpAuthKey);
    config.deviceId             = KopitraTrimString(InpDeviceId);
    config.enableOrderSubmission= InpEnableOrderSubmission;

@@ -32,7 +32,7 @@ struct KopitraSession
    KopitraSessionState state;
    string              sessionId;
    string              authToken;
-   string              outboxCursor;
+   long                outboxSequence;
    datetime            lastHeartbeat;
    datetime            lastPoll;
    datetime            lastAttempt;
@@ -57,6 +57,9 @@ string KopitraFormatIso8601(const datetime value);
 string KopitraDoubleToJson(const double value,const int digits);
 string KopitraSessionStateToString(const KopitraSessionState state);
 KopitraSessionState KopitraParseSessionState(string statusText);
+string KopitraNormalizeAuthMethod(string method);
+bool   KopitraStringToBool(const string value);
+int    KopitraMsToSeconds(const int milliseconds);
 long   KopitraAccountLogin();
 string KopitraAccountCurrency();
 string KopitraAccountCompany();
@@ -102,6 +105,51 @@ string KopitraSanitizeIdentifier(string value)
    StringReplace(value,"\\","-");
    StringReplace(value,"--","-");
    return(value);
+  }
+
+string KopitraNormalizeAuthMethod(string method)
+  {
+   string normalized=StringToLower(KopitraTrimString(method));
+   if(StringLen(normalized)==0)
+      return("account_session_key");
+
+   string collapsed=normalized;
+   StringReplace(collapsed,"-","");
+   StringReplace(collapsed,"_","");
+   if(collapsed=="accountsessionkey")
+      return("account_session_key");
+   if(collapsed=="presharedkey" || collapsed=="preshared")
+      return("pre_shared_key");
+   if(collapsed=="brokertoken" || collapsed=="brokerissuedtoken")
+      return("broker_token");
+
+   StringReplace(normalized,"-"," ");
+   StringReplace(normalized,"_"," ");
+   while(StringFind(normalized,"  ")>=0)
+      StringReplace(normalized,"  "," ");
+   normalized=KopitraTrimString(normalized);
+   if(StringLen(normalized)==0)
+      normalized="account session key";
+   StringReplace(normalized," ","_");
+   return(normalized);
+  }
+
+bool KopitraStringToBool(const string value)
+  {
+   string normalized=StringToLower(KopitraTrimString(value));
+   return(normalized=="1" || normalized=="true" || normalized=="yes" || normalized=="on");
+  }
+
+int KopitraMsToSeconds(const int milliseconds)
+  {
+   if(milliseconds<=0)
+      return(0);
+   int seconds=milliseconds/1000;
+   if(milliseconds%1000>0)
+      seconds++;
+   if(seconds<=0)
+      seconds=1;
+   return(seconds);
   }
 
 string KopitraDefaultDeviceId()
@@ -492,6 +540,26 @@ bool KopitraExtractNextEventChunk(const string payload,int startIndex,int &chunk
          search=idIndex+4;
          continue;
         }
+      int container=prefix-1;
+      while(container>=0)
+        {
+         int holder=StringGetCharacter(payload,container);
+         if(holder==' '||holder=='\r'||holder=='\n'||holder=='\t')
+           {
+            container--;
+            continue;
+           }
+         break;
+        }
+      if(container>=0)
+        {
+         int holder=StringGetCharacter(payload,container);
+         if(holder!='[' && holder!=',')
+           {
+            search=idIndex+4;
+            continue;
+           }
+        }
       int depth=0;
       for(int idx=prefix; idx<length; idx++)
         {
@@ -519,7 +587,7 @@ void KopitraResetSession(KopitraAgentContext &ctx)
    ctx.session.state=SESSION_STATE_IDLE;
    ctx.session.sessionId="";
    ctx.session.authToken="";
-   ctx.session.outboxCursor="";
+   ctx.session.outboxSequence=0;
    ctx.session.lastHeartbeat=0;
    ctx.session.lastPoll=0;
    ctx.session.lastAttempt=0;
@@ -549,6 +617,11 @@ bool KopitraStartup(KopitraAgentContext &ctx,const KopitraConfig &config)
       KopitraLogError("API base URL is required.");
       return(false);
      }
+   if(StringLen(KopitraTrimString(config.accountId))==0)
+     {
+      KopitraLogError("Account identifier is required to negotiate a session.");
+      return(false);
+     }
    KopitraContextInit(ctx,config);
    KopitraLogInfo(StringFormat("Context initialized for account %s",config.accountId));
    return(true);
@@ -559,11 +632,21 @@ bool KopitraCreateSession(KopitraAgentContext &ctx)
    datetime now=TimeCurrent();
    ctx.session.lastAttempt=now;
 
+   if(StringLen(KopitraTrimString(ctx.config.authKey))==0)
+     {
+      KopitraLogError("Authentication key is required to establish a session.");
+      return(false);
+     }
+
+   string trimmedAccount=KopitraTrimString(ctx.config.accountId);
+   string trimmedDevice=KopitraTrimString(ctx.config.deviceId);
    string payload="{";
-   payload+="\"account_id\":\""+KopitraJsonEscape(ctx.config.accountId)+"\"";
-   payload+="\",\"auth_method\":\""+KopitraJsonEscape(ctx.config.authMethod)+"\"";
-   payload+="\",\"auth_key\":\""+KopitraJsonEscape(ctx.config.authKey)+"\"";
-   payload+="\",\"device_id\":\""+KopitraJsonEscape(ctx.config.deviceId)+"\"";
+   payload+="\"authMethod\":\""+KopitraJsonEscape(ctx.config.authMethod)+"\"";
+   payload+="\",\"authenticationKey\":\""+KopitraJsonEscape(ctx.config.authKey)+"\"";
+   if(StringLen(trimmedAccount)>0)
+      payload+="\",\"accountId\":\""+KopitraJsonEscape(trimmedAccount)+"\"";
+   if(StringLen(trimmedDevice)>0)
+      payload+="\",\"deviceId\":\""+KopitraJsonEscape(trimmedDevice)+"\"";
    payload+="\",\"platform\":{\"name\":\""+KopitraJsonEscape(TerminalInfoString(TERMINAL_NAME))+"\",\"build\":"+IntegerToString((int)TerminalInfoInteger(TERMINAL_BUILD))+"}";
    payload+="\",\"capabilities\":{\"events\":[\"InitAck\",\"OrderCommand\",\"ShutdownNotice\"],\"allowsOrderSubmission\":"+(ctx.config.enableOrderSubmission ? "true" : "false")+"}";
    payload+="}";
@@ -631,6 +714,27 @@ bool KopitraSubmitEvent(KopitraAgentContext &ctx,const string payload)
    bool ok=KopitraHttpRequest(ctx,"POST","/trade-agent/v1/sessions/current/inbox",payload,response,ctx.config.httpTimeoutMs,KopitraGenerateIdempotencyKey(ctx,"event"));
    if(!ok)
       KopitraLogWarn(StringFormat("Failed to submit event payload: %s",payload));
+   else
+     {
+      string acceptedText=KopitraExtractJsonField(response,"accepted");
+      if(StringLen(acceptedText)>0)
+        {
+         int accepted=StringToInteger(acceptedText);
+         if(accepted>0)
+            KopitraLogInfo(StringFormat("Submitted %d event(s) to inbox",accepted));
+        }
+      string pendingText=KopitraExtractJsonField(response,"pendingSession");
+      if(StringLen(pendingText)>0)
+        {
+         bool pending=KopitraStringToBool(pendingText);
+         KopitraSessionState newState=(pending ? SESSION_STATE_PENDING : SESSION_STATE_AUTHENTICATED);
+         if(newState!=ctx.session.state)
+           {
+            ctx.session.state=newState;
+            KopitraLogInfo(StringFormat("Session state updated to %s",KopitraSessionStateToString(newState)));
+           }
+        }
+     }
    return(ok);
   }
 
@@ -638,12 +742,13 @@ bool KopitraSubmitNamedEvent(KopitraAgentContext &ctx,const string eventType,str
   {
    if(StringLen(dataJson)==0)
       dataJson="{}";
+   string event="{";
+   event+="\"eventType\":\""+KopitraJsonEscape(eventType)+"\"";
+   event+="\",\"payload\":"+dataJson;
+   event+="\",\"occurredAt\":\""+KopitraFormatIso8601(TimeCurrent())+"\"";
+   event+="}";
    string payload="{";
-   payload+="\"eventType\":\""+KopitraJsonEscape(eventType)+"\"";
-   payload+="\",\"timestamp\":\""+KopitraFormatIso8601(TimeCurrent())+"\"";
-   payload+="\",\"accountId\":\""+KopitraJsonEscape(ctx.config.accountId)+"\"";
-   payload+="\",\"sessionId\":\""+KopitraJsonEscape(ctx.session.sessionId)+"\"";
-   payload+="\",\"data\":"+dataJson;
+   payload+="\"events\":["+event+"]";
    payload+="}";
    return(KopitraSubmitEvent(ctx,payload));
   }
@@ -696,7 +801,7 @@ bool KopitraSendSyncSnapshot(KopitraAgentContext &ctx)
    return(ok);
   }
 
-bool KopitraAckOutboxEvent(KopitraAgentContext &ctx,const string eventId)
+bool KopitraAckOutboxEvent(KopitraAgentContext &ctx,const string eventId,const long sequence)
   {
    if(StringLen(eventId)==0)
       return(false);
@@ -705,8 +810,12 @@ bool KopitraAckOutboxEvent(KopitraAgentContext &ctx,const string eventId)
    bool ok=KopitraHttpRequest(ctx,"POST",path,"{\"status\":\"received\"}",response,ctx.config.httpTimeoutMs,KopitraGenerateIdempotencyKey(ctx,"ack"));
    if(ok)
      {
-      ctx.session.outboxCursor=eventId;
-      KopitraLogInfo(StringFormat("Acknowledged event %s",eventId));
+      if(sequence>0 && sequence>ctx.session.outboxSequence)
+         ctx.session.outboxSequence=sequence;
+      if(sequence>0)
+         KopitraLogInfo(StringFormat("Acknowledged event %s (sequence=%I64d)",eventId,sequence));
+      else
+         KopitraLogInfo(StringFormat("Acknowledged event %s",eventId));
      }
    return(ok);
   }
@@ -714,8 +823,8 @@ bool KopitraAckOutboxEvent(KopitraAgentContext &ctx,const string eventId)
 bool KopitraFetchOutbox(KopitraAgentContext &ctx,string &response)
   {
    string path="/trade-agent/v1/sessions/current/outbox";
-   if(StringLen(ctx.session.outboxCursor)>0)
-      path+="?cursor="+ctx.session.outboxCursor;
+   if(ctx.session.outboxSequence>0)
+      path=StringFormat("%s?cursor=%I64d",path,ctx.session.outboxSequence);
    return(KopitraHttpRequest(ctx,"GET",path,"",response,ctx.config.httpTimeoutMs));
   }
 
@@ -724,12 +833,25 @@ void KopitraProcessOutbox(KopitraAgentContext &ctx,const string &payload)
    if(StringLen(payload)==0)
       return;
 
-   string retryAfterValue=KopitraExtractJsonField(payload,"retryAfter");
+   string retryAfterValue=KopitraExtractJsonField(payload,"retryAfterMs");
    if(StringLen(retryAfterValue)>0)
      {
-      int retry=StringToInteger(retryAfterValue);
-      if(retry>0)
-         ctx.session.retryAfterHint=retry;
+      int retryMs=StringToInteger(retryAfterValue);
+      int delay=KopitraMsToSeconds(retryMs);
+      if(delay>0)
+         ctx.session.retryAfterHint=delay;
+     }
+
+   string pendingValue=KopitraExtractJsonField(payload,"pending");
+   if(StringLen(pendingValue)>0)
+     {
+      bool pending=KopitraStringToBool(pendingValue);
+      KopitraSessionState newState=(pending ? SESSION_STATE_PENDING : SESSION_STATE_AUTHENTICATED);
+      if(newState!=ctx.session.state)
+        {
+         ctx.session.state=newState;
+         KopitraLogInfo(StringFormat("Session state updated to %s",KopitraSessionStateToString(newState)));
+        }
      }
 
    int cursor=0;
@@ -739,23 +861,22 @@ void KopitraProcessOutbox(KopitraAgentContext &ctx,const string &payload)
      {
       string chunk=StringSubstr(payload,chunkStart,chunkEnd-chunkStart+1);
       string eventId=KopitraExtractJsonFieldFromChunk(chunk,"id");
-      string eventType=KopitraExtractJsonFieldFromChunk(chunk,"type");
-      string status=KopitraExtractJsonFieldFromChunk(chunk,"status");
+      string eventType=KopitraExtractJsonFieldFromChunk(chunk,"eventType");
+      string sequenceText=KopitraExtractJsonFieldFromChunk(chunk,"sequence");
+      long sequence=0;
+      if(StringLen(sequenceText)>0)
+         sequence=(long)StringToInteger(sequenceText);
       if(StringLen(eventType)>0)
          KopitraLogInfo(StringFormat("Received event %s (%s)",eventId,eventType));
-      if(StringLen(eventType)>0 && (eventType=="SessionStateChanged" || eventType=="session.authenticated" || eventType=="session.pending"))
+      if(eventType=="InitAck" && ctx.session.state!=SESSION_STATE_AUTHENTICATED)
         {
-         if(StringLen(status)==0)
-            status=KopitraExtractJsonFieldFromChunk(chunk,"state");
-         KopitraSessionState newState=KopitraParseSessionState(status);
-         if(newState!=ctx.session.state)
-           {
-            ctx.session.state=newState;
-            KopitraLogInfo(StringFormat("Session state updated to %s",KopitraSessionStateToString(newState)));
-           }
+         ctx.session.state=SESSION_STATE_AUTHENTICATED;
+         KopitraLogInfo("Session authenticated by counterparty acknowledgement.");
         }
+      if(eventType=="ShutdownNotice")
+         KopitraLogWarn("Received shutdown notice from counterparty.");
       if(StringLen(eventId)>0)
-         KopitraAckOutboxEvent(ctx,eventId);
+         KopitraAckOutboxEvent(ctx,eventId,sequence);
       cursor=chunkEnd+1;
      }
    ctx.session.lastPoll=TimeCurrent();

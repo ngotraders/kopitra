@@ -164,6 +164,112 @@ async fn session_auth_flow_emits_init_ack() {
 }
 
 #[tokio::test]
+async fn pending_session_ingests_events_and_remains_pending() {
+    let app = router(AppState::default());
+    let account = "acct-003";
+    let auth_key = "pending-secret";
+
+    let create_idempotency = Uuid::new_v4().to_string();
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create session request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(created.pending);
+
+    let session_token = created.session_token;
+
+    let inbox_idempotency = Uuid::new_v4().to_string();
+    let inbox_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions/current/inbox")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", inbox_idempotency.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::from(
+            json!({
+                "events": [
+                    {
+                        "eventType": "InitRequest",
+                        "payload": {
+                            "accountLogin": "1001",
+                            "broker": "ExampleBroker",
+                        }
+                    },
+                    {
+                        "eventType": "StatusHeartbeat",
+                        "payload": {
+                            "state": "pending",
+                        }
+                    }
+                ]
+            })
+            .to_string(),
+        ))
+        .expect("failed to build inbox request");
+
+    let inbox_response = app
+        .clone()
+        .oneshot(inbox_request)
+        .await
+        .expect("router error");
+    let inbox_status = inbox_response.status();
+    let inbox_body = inbox_response
+        .into_body()
+        .collect()
+        .await
+        .expect("body collection failed")
+        .to_bytes();
+    assert_eq!(
+        inbox_status,
+        StatusCode::ACCEPTED,
+        "unexpected inbox status: {}",
+        String::from_utf8_lossy(&inbox_body)
+    );
+    let inbox: InboxResponsePayload = serde_json::from_slice(&inbox_body)
+        .expect("failed to deserialize inbox response");
+    assert_eq!(inbox.accepted, 2);
+    assert!(inbox.pending_session);
+
+    let outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build outbox request");
+
+    let (status, outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(outbox.pending);
+    assert!(outbox.events.is_empty());
+}
+
+#[tokio::test]
 async fn session_creation_is_idempotent_and_preempts_previous() {
     let app = router(AppState::default());
     let account = "acct-002";
@@ -297,6 +403,13 @@ struct SessionPromotionResponsePayload {
     session_id: Uuid,
     status: SessionStatus,
     pending: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InboxResponsePayload {
+    accepted: usize,
+    pending_session: bool,
 }
 
 #[derive(Debug, Deserialize)]
