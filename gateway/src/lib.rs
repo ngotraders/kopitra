@@ -957,6 +957,32 @@ impl SessionRecord {
         self.enqueue_outbox(request);
     }
 
+    fn apply_outbox_ack(&mut self, payload: &Value) {
+        let Some(event_id_value) = payload.get("eventId") else {
+            debug!("outbox ack missing eventId field");
+            return;
+        };
+
+        let Some(event_id) = event_id_value.as_str() else {
+            debug!(?event_id_value, "outbox ack eventId is not a string");
+            return;
+        };
+
+        let Ok(event_uuid) = Uuid::parse_str(event_id) else {
+            debug!(%event_id, "failed to parse outbox ack eventId");
+            return;
+        };
+
+        let sequence = payload.get("sequence").and_then(Value::as_u64);
+        let removed = self.acknowledge_outbox(event_uuid);
+
+        if removed {
+            debug!(%event_uuid, sequence, "acknowledged outbox event via inbox");
+        } else {
+            debug!(%event_uuid, sequence, "outbox ack did not match a pending event");
+        }
+    }
+
     fn capture_inbox(&mut self, batch: Vec<InboxEvent>) -> Vec<InboundEventRecord> {
         let mut captured = Vec::with_capacity(batch.len());
         for event in batch {
@@ -964,6 +990,10 @@ impl SessionRecord {
             let event_type_lower = event.event_type.to_ascii_lowercase();
             if event_type_lower.contains("heartbeat") {
                 self.last_heartbeat_at = Some(received_at);
+            }
+
+            if event_type_lower == "outboxack" {
+                self.apply_outbox_ack(&event.payload);
             }
 
             let record = InboundEventRecord {

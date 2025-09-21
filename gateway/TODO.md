@@ -5,7 +5,7 @@
 - [ ] Enforce configurable idle session timeouts and surface metrics for heartbeat compliance.
 
 ## Event Pipeline Improvements
-- [ ] Support batching for outbox acknowledgements to reduce request volume during volatile markets.
+- [x] Support batching for outbox acknowledgements to reduce request volume during volatile markets.
 - [ ] Emit structured telemetry for inbox processing, including rejection reasons and latency histograms.
 - [ ] Accept and normalize RFC3339 `occurredAt` timestamps from EA inbox events so agents can supply precise timing metadata.
 - [ ] Introduce replay protection for duplicate heartbeat and status events beyond basic idempotency keys.

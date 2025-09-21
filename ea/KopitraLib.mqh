@@ -39,6 +39,12 @@ struct KopitraSession
    int                 retryAfterHint;
   };
 
+struct KopitraAckEvent
+  {
+   string eventId;
+   long   sequence;
+  };
+
 struct KopitraAgentContext
   {
    KopitraConfig config;
@@ -69,6 +75,7 @@ double KopitraAccountEquity();
 double KopitraAccountMarginFree();
 string KopitraCollectSubscribedSymbolsJson();
 string KopitraCollectOpenTradesJson();
+bool   KopitraSubmitOutboxAcks(KopitraAgentContext &ctx,KopitraAckEvent &ackEvents[],const int count);
 
 void KopitraLog(const string level,const string message)
   {
@@ -801,23 +808,70 @@ bool KopitraSendSyncSnapshot(KopitraAgentContext &ctx)
    return(ok);
   }
 
-bool KopitraAckOutboxEvent(KopitraAgentContext &ctx,const string eventId,const long sequence)
+bool KopitraSubmitOutboxAcks(KopitraAgentContext &ctx,KopitraAckEvent &ackEvents[],const int count)
   {
-   if(StringLen(eventId)==0)
-      return(false);
-   string path=StringFormat("/trade-agent/v1/sessions/current/outbox/%s/ack",eventId);
-   string response="";
-   bool ok=KopitraHttpRequest(ctx,"POST",path,"{\"status\":\"received\"}",response,ctx.config.httpTimeoutMs,KopitraGenerateIdempotencyKey(ctx,"ack"));
-   if(ok)
+   if(count<=0)
+      return(true);
+
+   string eventsJson="";
+   datetime now=TimeCurrent();
+   string occurredAt=KopitraFormatIso8601(now);
+
+   for(int i=0;i<count;i++)
      {
-      if(sequence>0 && sequence>ctx.session.outboxSequence)
-         ctx.session.outboxSequence=sequence;
-      if(sequence>0)
-         KopitraLogInfo(StringFormat("Acknowledged event %s (sequence=%I64d)",eventId,sequence));
-      else
-         KopitraLogInfo(StringFormat("Acknowledged event %s",eventId));
+      if(StringLen(ackEvents[i].eventId)==0)
+         continue;
+
+      if(StringLen(eventsJson)>0)
+         eventsJson+=",";
+
+      string payload="{";
+      payload+="\\\"eventId\\\":\\\""+KopitraJsonEscape(ackEvents[i].eventId)+"\\\"";
+      if(ackEvents[i].sequence>0)
+         payload+=",\\\"sequence\\\":"+LongToString(ackEvents[i].sequence);
+      payload+=",\\\"status\\\":\\\"received\\\"";
+      payload+="}";
+
+      string event="{";
+      event+="\\\"eventType\\\":\\\"OutboxAck\\\"";
+      event+=",\\\"payload\\\":"+payload;
+      event+=",\\\"occurredAt\\\":\\\""+occurredAt+"\\\"";
+      event+="}";
+
+      eventsJson+=event;
      }
-   return(ok);
+
+   if(StringLen(eventsJson)==0)
+      return(true);
+
+   string payload="{";
+   payload+="\\\"events\\\":["+eventsJson+"]";
+   payload+="}";
+
+   bool ok=KopitraSubmitEvent(ctx,payload);
+   if(!ok)
+     {
+      KopitraLogWarn("Failed to submit outbox acknowledgements via inbox.");
+      return(false);
+     }
+
+   long maxSequence=ctx.session.outboxSequence;
+   for(int i=0;i<count;i++)
+     {
+      if(StringLen(ackEvents[i].eventId)==0)
+         continue;
+      if(ackEvents[i].sequence>0 && ackEvents[i].sequence>maxSequence)
+         maxSequence=ackEvents[i].sequence;
+      if(ackEvents[i].sequence>0)
+         KopitraLogInfo(StringFormat("Acknowledged event %s (sequence=%I64d)",ackEvents[i].eventId,ackEvents[i].sequence));
+      else
+         KopitraLogInfo(StringFormat("Acknowledged event %s",ackEvents[i].eventId));
+     }
+
+   if(maxSequence>ctx.session.outboxSequence)
+      ctx.session.outboxSequence=maxSequence;
+
+   return(true);
   }
 
 bool KopitraFetchOutbox(KopitraAgentContext &ctx,string &response)
@@ -854,6 +908,8 @@ void KopitraProcessOutbox(KopitraAgentContext &ctx,const string &payload)
         }
      }
 
+   KopitraAckEvent ackEvents[];
+   int ackCount=0;
    int cursor=0;
    int chunkStart=0;
    int chunkEnd=0;
@@ -863,9 +919,13 @@ void KopitraProcessOutbox(KopitraAgentContext &ctx,const string &payload)
       string eventId=KopitraExtractJsonFieldFromChunk(chunk,"id");
       string eventType=KopitraExtractJsonFieldFromChunk(chunk,"eventType");
       string sequenceText=KopitraExtractJsonFieldFromChunk(chunk,"sequence");
+      string requiresAckText=KopitraExtractJsonFieldFromChunk(chunk,"requiresAck");
       long sequence=0;
       if(StringLen(sequenceText)>0)
          sequence=(long)StringToInteger(sequenceText);
+      bool requiresAck=true;
+      if(StringLen(requiresAckText)>0)
+         requiresAck=KopitraStringToBool(requiresAckText);
       if(StringLen(eventType)>0)
          KopitraLogInfo(StringFormat("Received event %s (%s)",eventId,eventType));
       if(eventType=="InitAck" && ctx.session.state!=SESSION_STATE_AUTHENTICATED)
@@ -875,10 +935,17 @@ void KopitraProcessOutbox(KopitraAgentContext &ctx,const string &payload)
         }
       if(eventType=="ShutdownNotice")
          KopitraLogWarn("Received shutdown notice from counterparty.");
-      if(StringLen(eventId)>0)
-         KopitraAckOutboxEvent(ctx,eventId,sequence);
+      if(requiresAck && StringLen(eventId)>0)
+        {
+         ArrayResize(ackEvents,ackCount+1);
+         ackEvents[ackCount].eventId=eventId;
+         ackEvents[ackCount].sequence=sequence;
+         ackCount++;
+        }
       cursor=chunkEnd+1;
      }
+   if(ackCount>0)
+      KopitraSubmitOutboxAcks(ctx,ackEvents,ackCount);
    ctx.session.lastPoll=TimeCurrent();
   }
 

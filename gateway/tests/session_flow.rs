@@ -103,26 +103,38 @@ async fn session_auth_flow_emits_init_ack() {
     let ack_idempotency = Uuid::new_v4().to_string();
     let ack_request = Request::builder()
         .method(http::Method::POST)
-        .uri(format!(
-            "/trade-agent/v1/sessions/current/outbox/{}/ack",
-            init_ack.id
-        ))
+        .uri("/trade-agent/v1/sessions/current/inbox")
+        .header(header::CONTENT_TYPE, "application/json")
         .header("X-TradeAgent-Account", account)
         .header("Idempotency-Key", ack_idempotency.as_str())
         .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
-        .body(Body::empty())
+        .body(Body::from(
+            json!({
+                "events": [
+                    {
+                        "eventType": "OutboxAck",
+                        "payload": {
+                            "eventId": init_ack.id,
+                            "sequence": init_ack.sequence,
+                            "status": "received",
+                        }
+                    }
+                ]
+            })
+            .to_string(),
+        ))
         .expect("failed to build ack request");
 
-    let (status, acked) = json_response::<AckResponsePayload>(
+    let (status, ack_response) = json_response::<InboxResponsePayload>(
         app.clone()
             .oneshot(ack_request)
             .await
             .expect("router error"),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(acked.acknowledged_event_id, init_ack.id);
-    assert_eq!(acked.remaining_outbox_depth, 0);
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(ack_response.accepted, 1);
+    assert!(!ack_response.pending_session);
 
     let outbox_after_ack_request = Request::builder()
         .method(http::Method::GET)
@@ -670,13 +682,6 @@ struct OutboxEventPayload {
 struct ErrorResponsePayload {
     code: String,
     message: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AckResponsePayload {
-    acknowledged_event_id: Uuid,
-    remaining_outbox_depth: usize,
 }
 
 async fn approve_session_via_service_bus(
