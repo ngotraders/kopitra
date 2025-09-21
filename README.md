@@ -120,6 +120,7 @@ The Rust counterparty service handles synchronous trade execution, while Azure F
 | `POST` | `/trade-agent/v1/sessions` | Rust Counterparty Service (App Service) | Establish an authenticated EA session using the account-scoped key; first session wins while additional attempts receive HTTP 409. |
 | `DELETE` | `/trade-agent/v1/sessions/current` | Rust Counterparty Service (App Service) | Release the active EA session lease; requires the same headers and idempotency key used during creation. |
 | `GET` | `/trade-agent/v1/sessions/current/outbox` | Rust Counterparty Service (App Service) | Poll for pending counterparty events (trade started/partial/full close) with ordered sequence IDs. |
+| `POST` | `/trade-agent/v1/sessions/{sessionId}/orders` | Rust Counterparty Service (App Service) | Instruct a specific EA session to open or close positions by queuing `OrderCommand` events with the desired instrument, side, size, and optional execution constraints. |
 | `POST` | `/trade-agent/v1/sessions/current/inbox` | Rust Counterparty Service (App Service) | Push EA-originated events such as acknowledgements (`OutboxAck`), available currency pairs, and automation state updates. |
 | `POST` | `/trade-agent/v1/signals` | Rust Counterparty Service (App Service) | Receive EA trade intents; validate headers and trigger immediate copy trades before queuing follow-up events. |
 | `POST` | `/trade-agent/v1/executions` | Rust Counterparty Service (App Service) | Record broker execution callbacks with idempotent handling and emit reconciliation messages. |
