@@ -1,24 +1,40 @@
 # Project Planning TODO
 
 ## EA Counterparty Service TODO
-- **EA / counterparty service topology**
-  - Operate the EA as an event-driven client inside MT4, while the counterparty service exposes a hybrid REST + WebSocket gateway for low-latency coordination.
-  - Support multi-tenant broker accounts but enforce a single active EA session per account by preemptively cancelling any existing session when a new one is authorized.
-- **Authentication and session management**
-  - Offer pluggable authentication strategies: (a) the default `AccountSessionKey` flow for MT4 using `account_id` plus a first-launch generated or pre-shared authentication key, and (b) optional token-based or OAuth client credential adapters for future integrations.
-  - Create sessions through `POST /ea-gateway/v1/sessions` supplying `account_id`, `auth_method`, and the authentication material; hash secrets at rest in the session store.
-  - Persist sessions in a store keyed by the account unique identifier and session ID. When the submitted authentication key has not been verified yet, mark the session as `pending` (unauthenticated) while still capturing telemetry and logging inbound data.
-  - Deny order/event emission while a session is `pending`; once the authentication key is approved (manual backoffice or automated verification), transition the session to `authenticated`, unlock event exchange, and notify the EA via a state-change message.
-  - Issue heartbeat timers that close sessions with missing `StatusHeartbeat` events beyond the configured threshold and signal the EA to reconnect.
-- **Event catalogue (EA ⇔ counterparty service)**
-  - `InitRequest` / `InitAck`: initialize capabilities. `InitRequest` is accepted in `pending` sessions to gather environment metadata, but `InitAck` with actionable directives is deferred until authentication succeeds.
-  - `StatusHeartbeat`: periodic health updates from the EA. Used both for liveness checks and to promote `pending` sessions once the authentication key has been validated.
-  - `OrderIntent`: EA-provided trade opportunities, queued but not dispatched until the session becomes `authenticated`.
-  - `OrderCommand`: execution instructions from the counterparty service to the EA. These are suppressed for `pending` sessions and emitted immediately after promotion, including any backlog accumulated during verification.
-  - `ExecutionReport`: MT4 execution outcomes mapped to broker tickets and TradeAgent sequence IDs for deterministic reconciliation.
-  - `SyncSnapshot`: bidirectional state synchronization for positions, balances, and order books, triggered at session start and on-demand integrity checks.
-  - `ErrorAlert`: anomaly and policy violation notices, including remediation steps and retry policies; unauthenticated sessions only log these events server-side without dispatching to the EA.
-  - `ShutdownNotice`: graceful shutdown handshake issued before maintenance windows or deliberate disconnects to guarantee deterministic session closure.
+### EA / Counterparty Topology
+- Operate the EA as an event-driven client inside MT4/MT5, while the counterparty service exposes a hybrid REST + WebSocket gateway for low-latency coordination.
+- Guarantee **one active session per account + auth key**. When a new session is requested with the same composite key, atomically retire the previous session, notify the old EA instance, and promote the newcomer.
+- Maintain per-session sequence numbers that are monotonically increasing across reconnects so event ordering is deterministic even after preemption.
+
+### Authentication and Session Lifecycle
+- Primary authentication: `AccountSessionKey` formed from the EA-provided `account_id` plus a locally generated or pre-shared authentication key. Secrets are hashed at rest and compared using constant-time checks.
+- Admin console verification: the backoffice UI publishes `AuthApproval` or `AuthReject` commands to an Azure Service Bus queue/topic (`ea-auth-approvals`). The gateway subscribes to these messages to promote `pending` sessions to `authenticated` status or to terminate unapproved sessions.
+- Support optional future providers (broker-issued tokens, OAuth client credentials) by modelling authentication methods as strategy plug-ins with their own validation routines.
+- Session creation endpoint: `POST /ea-gateway/v1/sessions` accepts `account_id`, `auth_method`, `auth_key`, `platform`, and EA build metadata. Responses include the authoritative `session_id`, current status (`pending` or `authenticated`), and heartbeat cadence.
+- Persist sessions in a store keyed by the composite `account_id` + `auth_key` fingerprint to simplify single-connection enforcement across horizontally scaled instances.
+- While a session is `pending`, allow telemetry ingestion (`InitRequest`, `StatusHeartbeat`, diagnostics) but suppress outbox event delivery. Promote sessions after receiving a matching `AuthApproval` from the admin console or auto-approval policy.
+- Emit structured logs whenever `pending` sessions attempt prohibited operations so operators can audit attempted order flow prior to approval.
+- Configure heartbeat timers that close sessions missing `StatusHeartbeat` events beyond threshold and send a `ShutdownNotice` to prompt EA reconnection.
+
+### Admin Console and Azure Service Bus Integration
+- Provision an Azure Service Bus namespace dedicated to EA control plane messaging. Use topics to fan out approval events to all gateway replicas.
+- Define message contracts:
+  - `AuthApproval`: `{ accountId, authKeyFingerprint, approvedBy, expiresAt }` promoting a session and optionally setting a validity window.
+  - `AuthReject`: `{ accountId, authKeyFingerprint, reason, rejectedBy }` signalling the gateway to terminate the pending session and notify the EA.
+- Build a control-plane worker inside the counterparty service that listens to the queue/topic, validates message authenticity (SAS tokens / Azure AD), and updates session state accordingly.
+- Record all admin-driven state changes in an audit log table (timestamp, operator, action, session snapshot) for compliance review.
+
+### Event Catalogue (EA ⇔ Counterparty Service)
+- `InitRequest` / `InitAck`: bootstrap capabilities. `InitRequest` is accepted while `pending` to collect platform metadata, but `InitAck` with operational directives is deferred until authentication succeeds.
+- `StatusHeartbeat`: periodic health updates and status snapshots from the EA. Used for liveness, latency metrics, and to trigger promotion if coupled with an approved key.
+- `StatusSummary`: richer status payload emitted on major state changes (e.g., spread alerts, connectivity degradation) to aid monitoring dashboards.
+- `OrderIntent`: EA-provided trade opportunities queued until the session is `authenticated`. Intent metadata includes desired volume, symbol, and trade rationale for auditability.
+- `OrderCommand`: execution instructions from the counterparty service to the EA (enter/exit positions, modify orders). Suppressed for `pending` sessions and replayed immediately after promotion.
+- `OrderCancel`: explicit cancellation directives when risk guards or operator interventions demand it. Requires acknowledgement from the EA with correlated sequence numbers.
+- `ExecutionReport`: MT4/MT5 execution outcomes mapped to broker tickets and TradeAgent sequence IDs for deterministic reconciliation and profit tracking.
+- `SyncSnapshot`: bidirectional state synchronization for balances, open positions, and outstanding orders, triggered at session start and on-demand integrity checks.
+- `ErrorAlert`: anomaly and policy violation notices. For `pending` sessions, capture these server-side and emit operator logs instead of forwarding to the EA.
+- `ShutdownNotice`: graceful shutdown handshake issued before maintenance windows or deliberate disconnects to guarantee deterministic session closure. Includes an optional `reason` and suggested reconnect window.
 
 
 ## Phased Milestones
