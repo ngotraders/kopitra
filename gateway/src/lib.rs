@@ -9,13 +9,17 @@ use axum::{
     routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+mod admin;
+
+pub use admin::{ServiceBusConfig, ServiceBusConfigError, ServiceBusWorker};
 
 /// Builds the application router for the EA counterparty service.
 pub fn router(state: AppState) -> Router {
@@ -56,6 +60,44 @@ pub struct AppState {
 struct SharedState {
     sessions: HashMap<String, AccountSessions>,
     idempotency: HashMap<String, StoredResponse>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdminApprovalCommand {
+    pub account_id: String,
+    pub session_id: Uuid,
+    pub auth_key_fingerprint: String,
+    pub approved_by: Option<String>,
+    pub expires_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdminRejectionCommand {
+    pub account_id: String,
+    pub session_id: Uuid,
+    pub auth_key_fingerprint: String,
+    pub rejected_by: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum AdminCommand {
+    Approve(AdminApprovalCommand),
+    Reject(AdminRejectionCommand),
+}
+
+#[derive(Debug, Error)]
+pub enum AdminCommandError {
+    #[error("no active session for the supplied account")]
+    SessionMissing,
+    #[error("the supplied session id does not match the active session")]
+    SessionMismatch,
+    #[error("the provided authentication key is invalid")]
+    AuthenticationFailed,
+    #[error("the session has been terminated and cannot be modified")]
+    SessionTerminated,
+    #[error("authentication key must not be empty")]
+    AuthenticationKeyEmpty,
 }
 
 #[derive(Default)]
@@ -104,8 +146,208 @@ impl AccountSessions {
         Some(session)
     }
 
+    fn remove_from_active_index(&mut self, auth_hash: &str, token: Uuid) {
+        if matches!(self.active_index.get(auth_hash), Some(stored) if stored == &token) {
+            self.active_index.remove(auth_hash);
+        }
+    }
+
     fn is_empty(&self) -> bool {
         self.sessions_by_token.is_empty()
+    }
+}
+
+impl AppState {
+    async fn stored_response(&self, key: &str) -> Option<StoredResponse> {
+        self.inner.lock().await.idempotency.get(key).cloned()
+    }
+
+    async fn store_response(&self, key: String, stored: StoredResponse) {
+        self.inner.lock().await.idempotency.insert(key, stored);
+    }
+
+    pub async fn promote_session_with_secret(
+        &self,
+        account: &str,
+        session_id: Uuid,
+        authentication_key: &str,
+    ) -> Result<SessionPromotionResponse, AdminCommandError> {
+        if authentication_key.trim().is_empty() {
+            return Err(AdminCommandError::AuthenticationKeyEmpty);
+        }
+
+        let fingerprint = {
+            let mut inner = self.inner.lock().await;
+            let account_sessions = inner
+                .sessions
+                .get_mut(account)
+                .ok_or(AdminCommandError::SessionMissing)?;
+            let session = account_sessions
+                .get_mut_by_session_id(&session_id)
+                .ok_or(AdminCommandError::SessionMismatch)?;
+            hash_secret(session.auth_method, authentication_key, account)
+        };
+
+        self.promote_session_internal(account, session_id, fingerprint, None)
+            .await
+    }
+
+    pub async fn promote_session_with_fingerprint(
+        &self,
+        account: &str,
+        session_id: Uuid,
+        fingerprint: &str,
+        operator: Option<&str>,
+    ) -> Result<SessionPromotionResponse, AdminCommandError> {
+        self.promote_session_internal(account, session_id, fingerprint.to_string(), operator)
+            .await
+    }
+
+    pub async fn reject_session(
+        &self,
+        account: &str,
+        session_id: Uuid,
+        fingerprint: &str,
+        reason: Option<String>,
+        rejected_by: Option<String>,
+    ) -> Result<SessionRejectionResponse, AdminCommandError> {
+        let mut inner = self.inner.lock().await;
+        let account_sessions = inner
+            .sessions
+            .get_mut(account)
+            .ok_or(AdminCommandError::SessionMissing)?;
+        let (outcome, auth_hash, session_token) = {
+            let session = account_sessions
+                .get_mut_by_session_id(&session_id)
+                .ok_or(AdminCommandError::SessionMismatch)?;
+
+            if !session.verify_secret(fingerprint) {
+                return Err(AdminCommandError::AuthenticationFailed);
+            }
+
+            let auth_hash = session.auth_key_hash.clone();
+            let session_token = session.session_token;
+            let outcome = session.reject(reason.clone(), rejected_by.clone());
+            (outcome, auth_hash, session_token)
+        };
+
+        if outcome.already_terminated {
+            debug!(
+                account = %account,
+                session = %session_id,
+                "reject command ignored; session already terminated"
+            );
+        } else {
+            account_sessions.remove_from_active_index(&auth_hash, session_token);
+            match rejected_by.as_deref() {
+                Some(operator) if !operator.is_empty() => {
+                    warn!(
+                        account = %account,
+                        session = %session_id,
+                        operator,
+                        reason = ?reason,
+                        "session rejected"
+                    );
+                }
+                _ => {
+                    warn!(
+                        account = %account,
+                        session = %session_id,
+                        reason = ?reason,
+                        "session rejected"
+                    );
+                }
+            }
+        }
+
+        Ok(outcome.response)
+    }
+
+    pub async fn apply_admin_command(
+        &self,
+        command: AdminCommand,
+    ) -> Result<AdminCommandOutcome, AdminCommandError> {
+        match command {
+            AdminCommand::Approve(command) => {
+                let AdminApprovalCommand {
+                    account_id,
+                    session_id,
+                    auth_key_fingerprint,
+                    approved_by,
+                    expires_at: _,
+                } = command;
+
+                let response = self
+                    .promote_session_with_fingerprint(
+                        &account_id,
+                        session_id,
+                        &auth_key_fingerprint,
+                        approved_by.as_deref(),
+                    )
+                    .await?;
+
+                Ok(AdminCommandOutcome::SessionAuthenticated(response))
+            }
+            AdminCommand::Reject(command) => {
+                let AdminRejectionCommand {
+                    account_id,
+                    session_id,
+                    auth_key_fingerprint,
+                    rejected_by,
+                    reason,
+                } = command;
+
+                let response = self
+                    .reject_session(
+                        &account_id,
+                        session_id,
+                        &auth_key_fingerprint,
+                        reason,
+                        rejected_by,
+                    )
+                    .await?;
+
+                Ok(AdminCommandOutcome::SessionRejected(response))
+            }
+        }
+    }
+
+    async fn promote_session_internal(
+        &self,
+        account: &str,
+        session_id: Uuid,
+        fingerprint: String,
+        operator: Option<&str>,
+    ) -> Result<SessionPromotionResponse, AdminCommandError> {
+        let mut inner = self.inner.lock().await;
+        let account_sessions = inner
+            .sessions
+            .get_mut(account)
+            .ok_or(AdminCommandError::SessionMissing)?;
+        let session = account_sessions
+            .get_mut_by_session_id(&session_id)
+            .ok_or(AdminCommandError::SessionMismatch)?;
+
+        let was_pending = session.status.is_pending();
+        let response = session.promote(&fingerprint)?;
+
+        if was_pending && response.status == SessionStatus::Authenticated {
+            match operator {
+                Some(operator) if !operator.is_empty() => {
+                    info!(
+                        account = %account,
+                        session = %session_id,
+                        operator,
+                        "session authenticated"
+                    );
+                }
+                _ => {
+                    info!(account = %account, session = %session_id, "session authenticated");
+                }
+            }
+        }
+
+        Ok(response)
     }
 }
 
@@ -393,13 +635,29 @@ struct InboxResponse {
     pending_session: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct SessionPromotionResponse {
+pub struct SessionPromotionResponse {
     session_id: Uuid,
     status: SessionStatus,
     pending: bool,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRejectionResponse {
+    session_id: Uuid,
+    status: SessionStatus,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum AdminCommandOutcome {
+    SessionAuthenticated(SessionPromotionResponse),
+    SessionRejected(SessionRejectionResponse),
 }
 
 #[derive(Debug, Serialize)]
@@ -433,14 +691,48 @@ struct SessionRecord {
     inbox_log: Vec<InboundEventRecord>,
 }
 
+struct SessionRejectionOutcome {
+    response: SessionRejectionResponse,
+    already_terminated: bool,
+}
+
 enum TerminationReason {
     Preempted,
+    Rejected {
+        rejected_by: Option<String>,
+        reason: Option<String>,
+    },
 }
 
 impl TerminationReason {
-    const fn as_str(&self) -> &'static str {
+    fn into_payload(self, terminated_at: OffsetDateTime) -> Value {
         match self {
-            TerminationReason::Preempted => "session_preempted",
+            TerminationReason::Preempted => json!({
+                "reason": "session_preempted",
+                "terminatedAt": terminated_at,
+            }),
+            TerminationReason::Rejected {
+                rejected_by,
+                reason,
+            } => {
+                let mut payload = Map::new();
+                payload.insert(
+                    "reason".to_string(),
+                    Value::String("session_rejected".to_string()),
+                );
+                payload.insert("terminatedAt".to_string(), json!(terminated_at));
+                if let Some(reason) = reason {
+                    if !reason.is_empty() {
+                        payload.insert("details".to_string(), Value::String(reason));
+                    }
+                }
+                if let Some(operator) = rejected_by {
+                    if !operator.is_empty() {
+                        payload.insert("rejectedBy".to_string(), Value::String(operator));
+                    }
+                }
+                Value::Object(payload)
+            }
         }
     }
 }
@@ -480,6 +772,69 @@ impl SessionRecord {
         self.auth_key_hash == candidate_hash
     }
 
+    fn promote(
+        &mut self,
+        fingerprint: &str,
+    ) -> Result<SessionPromotionResponse, AdminCommandError> {
+        if !self.verify_secret(fingerprint) {
+            return Err(AdminCommandError::AuthenticationFailed);
+        }
+
+        if self.status == SessionStatus::Terminated {
+            return Err(AdminCommandError::SessionTerminated);
+        }
+
+        if self.status == SessionStatus::Authenticated {
+            return Ok(SessionPromotionResponse {
+                session_id: self.session_id,
+                status: self.status,
+                pending: false,
+                message: "session already authenticated".to_string(),
+            });
+        }
+
+        self.mark_authenticated();
+        self.enqueue_init_ack();
+
+        Ok(SessionPromotionResponse {
+            session_id: self.session_id,
+            status: self.status,
+            pending: false,
+            message: "session authenticated".to_string(),
+        })
+    }
+
+    fn reject(
+        &mut self,
+        reason: Option<String>,
+        rejected_by: Option<String>,
+    ) -> SessionRejectionOutcome {
+        let already_terminated = self.status == SessionStatus::Terminated;
+
+        if !already_terminated {
+            self.mark_terminated(TerminationReason::Rejected {
+                rejected_by: rejected_by.clone(),
+                reason: reason.clone(),
+            });
+        }
+
+        let message = if already_terminated {
+            "session already terminated"
+        } else {
+            "session rejected"
+        };
+
+        SessionRejectionOutcome {
+            response: SessionRejectionResponse {
+                session_id: self.session_id,
+                status: self.status,
+                message: message.to_string(),
+                reason,
+            },
+            already_terminated,
+        }
+    }
+
     fn mark_authenticated(&mut self) {
         self.status = SessionStatus::Authenticated;
         self.updated_at = current_time();
@@ -491,10 +846,8 @@ impl SessionRecord {
         }
 
         self.status = SessionStatus::Terminated;
-        let payload = json!({
-            "reason": reason.as_str(),
-            "terminatedAt": current_time(),
-        });
+        let terminated_at = current_time();
+        let payload = reason.into_payload(terminated_at);
 
         let request = OutboxEventRequest {
             event_type: "ShutdownNotice".to_string(),
@@ -900,84 +1253,40 @@ async fn approve_session(
         &idempotency,
     );
 
-    if let Some(stored) = state
-        .inner
-        .lock()
+    if let Some(stored) = state.stored_response(&storage_key).await {
+        return Ok(stored.into_response());
+    }
+
+    let promotion = state
+        .promote_session_with_secret(&account, session_id, &payload.authentication_key)
         .await
-        .idempotency
-        .get(&storage_key)
-        .cloned()
-    {
-        return Ok(stored.into_response());
-    }
+        .map_err(|error| match error {
+            AdminCommandError::SessionMissing => ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ),
+            AdminCommandError::SessionMismatch => ApiError::conflict(
+                "session_mismatch",
+                "the supplied session id does not match the active session",
+            ),
+            AdminCommandError::AuthenticationFailed => ApiError::forbidden(
+                "authentication_failed",
+                "the provided authentication key is invalid",
+            ),
+            AdminCommandError::SessionTerminated => ApiError::conflict(
+                "session_terminated",
+                "the session has been terminated and cannot be approved",
+            ),
+            AdminCommandError::AuthenticationKeyEmpty => ApiError::bad_request(
+                "authentication_key_empty",
+                "authentication_key must not be empty",
+            ),
+        })?;
 
-    let mut inner = state.inner.lock().await;
-    let Some(account_sessions) = inner.sessions.get_mut(&account) else {
-        return Err(ApiError::unauthorized(
-            "session_missing",
-            "no active session for the supplied account",
-        ));
-    };
-
-    let Some(session) = account_sessions.get_mut_by_session_id(&session_id) else {
-        return Err(ApiError::conflict(
-            "session_mismatch",
-            "the supplied session id does not match the active session",
-        ));
-    };
-
-    if payload.authentication_key.trim().is_empty() {
-        return Err(ApiError::bad_request(
-            "authentication_key_empty",
-            "authentication_key must not be empty",
-        ));
-    }
-
-    let auth_hash = hash_secret(session.auth_method, &payload.authentication_key, &account);
-
-    if !session.verify_secret(&auth_hash) {
-        return Err(ApiError::forbidden(
-            "authentication_failed",
-            "the provided authentication key is invalid",
-        ));
-    }
-
-    if session.status == SessionStatus::Terminated {
-        return Err(ApiError::conflict(
-            "session_terminated",
-            "the session has been terminated and cannot be approved",
-        ));
-    }
-
-    if session.status == SessionStatus::Authenticated {
-        let response = SessionPromotionResponse {
-            session_id,
-            status: session.status,
-            pending: false,
-            message: "session already authenticated".to_string(),
-        };
-        let stored = StoredResponse::from_json(StatusCode::OK, &response)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-        inner.idempotency.insert(storage_key, stored.clone());
-        return Ok(stored.into_response());
-    }
-
-    session.mark_authenticated();
-    session.enqueue_init_ack();
-
-    info!(account = %account, session = %session_id, "session authenticated");
-
-    let response = SessionPromotionResponse {
-        session_id,
-        status: session.status,
-        pending: false,
-        message: "session authenticated".to_string(),
-    };
-
-    let stored = StoredResponse::from_json(StatusCode::OK, &response)
+    let stored = StoredResponse::from_json(StatusCode::OK, &promotion)
         .map_err(|error| ApiError::internal(error.to_string()))?;
 
-    inner.idempotency.insert(storage_key, stored.clone());
+    state.store_response(storage_key, stored.clone()).await;
 
     Ok(stored.into_response())
 }
@@ -1186,5 +1495,93 @@ mod tests {
         assert_eq!(status, HealthStatus::ok("gateway"));
         assert!(status.healthy);
         assert_eq!(status.message, "ok");
+    }
+
+    #[tokio::test]
+    async fn service_bus_promotion_authenticates_session() {
+        let state = AppState::default();
+        let account = "acct-service".to_string();
+        let fingerprint = hash_secret(AuthMethod::AccountSessionKey, "secret", &account);
+        let session_id;
+
+        {
+            let mut inner = state.inner.lock().await;
+            let account_sessions = inner.sessions.entry(account.clone()).or_default();
+            let session = SessionRecord::new(AuthMethod::AccountSessionKey, fingerprint.clone());
+            session_id = session.session_id;
+            account_sessions.insert(session);
+        }
+
+        let promotion = state
+            .promote_session_with_fingerprint(&account, session_id, &fingerprint, Some("ops"))
+            .await
+            .expect("promotion should succeed");
+
+        assert_eq!(promotion.session_id, session_id);
+        assert_eq!(promotion.status, SessionStatus::Authenticated);
+        assert!(!promotion.pending);
+
+        let mut inner = state.inner.lock().await;
+        let account_sessions = inner.sessions.get_mut(&account).expect("account missing");
+        let session = account_sessions
+            .get_mut_by_session_id(&session_id)
+            .expect("session missing");
+        assert_eq!(session.status, SessionStatus::Authenticated);
+        assert_eq!(session.outbox.len(), 1);
+        assert_eq!(session.outbox[0].event_type, "InitAck");
+    }
+
+    #[tokio::test]
+    async fn reject_session_marks_session_terminated() {
+        let state = AppState::default();
+        let account = "acct-reject".to_string();
+        let fingerprint = hash_secret(AuthMethod::AccountSessionKey, "secret", &account);
+        let session_id;
+
+        {
+            let mut inner = state.inner.lock().await;
+            let account_sessions = inner.sessions.entry(account.clone()).or_default();
+            let session = SessionRecord::new(AuthMethod::AccountSessionKey, fingerprint.clone());
+            session_id = session.session_id;
+            account_sessions.insert(session);
+        }
+
+        let rejection = state
+            .reject_session(
+                &account,
+                session_id,
+                &fingerprint,
+                Some("not approved".to_string()),
+                Some("operator".to_string()),
+            )
+            .await
+            .expect("rejection should succeed");
+
+        assert_eq!(rejection.session_id, session_id);
+        assert_eq!(rejection.status, SessionStatus::Terminated);
+        assert_eq!(rejection.reason.as_deref(), Some("not approved"));
+
+        let mut inner = state.inner.lock().await;
+        let account_sessions = inner.sessions.get_mut(&account).expect("account missing");
+        let session = account_sessions
+            .get_mut_by_session_id(&session_id)
+            .expect("session missing");
+        assert_eq!(session.status, SessionStatus::Terminated);
+        let shutdown = session.outbox.last().expect("missing shutdown");
+        assert_eq!(shutdown.event_type, "ShutdownNotice");
+        assert_eq!(
+            shutdown
+                .payload
+                .get("reason")
+                .and_then(|value| value.as_str()),
+            Some("session_rejected")
+        );
+        assert_eq!(
+            shutdown
+                .payload
+                .get("rejectedBy")
+                .and_then(|value| value.as_str()),
+            Some("operator")
+        );
     }
 }

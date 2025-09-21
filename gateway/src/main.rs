@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr};
 
-use gateway::{AppState, router};
+use gateway::{AppState, ServiceBusConfig, ServiceBusWorker, router};
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -10,6 +10,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing();
 
     let state = AppState::default();
+
+    let bus_config = ServiceBusConfig::from_env()
+        .map_err(|error| -> Box<dyn std::error::Error> { Box::new(error) })?;
+
+    if let Some(config) = bus_config {
+        match ServiceBusWorker::from_config(config) {
+            Ok(worker) => {
+                worker.spawn(state.clone());
+                info!("Service Bus admin listener started");
+            }
+            Err(error) => {
+                warn!(%error, "failed to initialize Service Bus worker");
+            }
+        }
+    } else {
+        info!(
+            "Service Bus configuration not provided; admin approvals will rely on the HTTP endpoint"
+        );
+    }
+
     let app = router(state);
 
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());

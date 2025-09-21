@@ -10,6 +10,11 @@
 - [ ] Accept and normalize RFC3339 `occurredAt` timestamps from EA inbox events so agents can supply precise timing metadata.
 - [ ] Introduce replay protection for duplicate heartbeat and status events beyond basic idempotency keys.
 
+## Azure Service Bus Integration
+- [ ] Surface Service Bus listener health information on the `/trade-agent/v1/health` endpoint.
+- [ ] Implement dead-letter handling for malformed or unauthorized admin commands.
+- [ ] Emit metrics for Service Bus receive latency, command outcomes, and delete failures.
+
 ## Testing and Tooling
 - [ ] Add load and soak tests to exercise concurrent MT4 EA connections.
 - [ ] Extend negative test coverage for header validation and unauthorized access paths.
