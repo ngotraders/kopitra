@@ -5,16 +5,21 @@ use axum::{
     http::{self, Request, StatusCode, header},
     response::Response,
 };
-use gateway::{AppState, SessionStatus, router};
+use gateway::{
+    AdminApprovalCommand, AdminCommand, AdminCommandOutcome, AppState, AuthMethod, SessionStatus,
+    router,
+};
 use http_body_util::BodyExt;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tower::ServiceExt;
 use uuid::Uuid;
 
 #[tokio::test]
 async fn session_auth_flow_emits_init_ack() {
-    let app = router(AppState::default());
+    let state = AppState::default();
+    let app = router(state.clone());
     let account = "acct-001";
     let auth_key = "shared-secret";
     let create_idempotency = Uuid::new_v4().to_string();
@@ -68,32 +73,8 @@ async fn session_auth_flow_emits_init_ack() {
     assert!(outbox_before.pending);
     assert!(outbox_before.events.is_empty());
 
-    let approve_idempotency = Uuid::new_v4().to_string();
-    let approve_request = Request::builder()
-        .method(http::Method::POST)
-        .uri(format!("/trade-agent/v1/sessions/{session_id}/approve"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("X-TradeAgent-Account", account)
-        .header("Idempotency-Key", approve_idempotency.as_str())
-        .body(Body::from(
-            json!({
-                "authenticationKey": auth_key,
-            })
-            .to_string(),
-        ))
-        .expect("failed to build approve request");
-
-    let (status, approved) = json_response::<SessionPromotionResponsePayload>(
-        app.clone()
-            .oneshot(approve_request)
-            .await
-            .expect("router error"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(approved.session_id, session_id);
-    assert_eq!(approved.status, SessionStatus::Authenticated);
-    assert!(!approved.pending);
+    approve_session_via_service_bus(&state, account, session_id, created.auth_method, auth_key)
+        .await;
 
     let outbox_after_request = Request::builder()
         .method(http::Method::GET)
@@ -388,7 +369,8 @@ async fn session_creation_is_idempotent_and_preempts_previous() {
 
 #[tokio::test]
 async fn terminated_session_rejects_inbox_submission() {
-    let app = router(AppState::default());
+    let state = AppState::default();
+    let app = router(state.clone());
     let account = "acct-004";
     let auth_key = "one-time-secret";
 
@@ -418,32 +400,14 @@ async fn terminated_session_rejects_inbox_submission() {
 
     let session_token = created.session_token;
 
-    let approve_idempotency = Uuid::new_v4().to_string();
-    let approve_request = Request::builder()
-        .method(http::Method::POST)
-        .uri(format!(
-            "/trade-agent/v1/sessions/{}/approve",
-            created.session_id
-        ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("X-TradeAgent-Account", account)
-        .header("Idempotency-Key", approve_idempotency.as_str())
-        .body(Body::from(
-            json!({
-                "authenticationKey": auth_key,
-            })
-            .to_string(),
-        ))
-        .expect("failed to build approve request");
-
-    let (status, _) = json_response::<SessionPromotionResponsePayload>(
-        app.clone()
-            .oneshot(approve_request)
-            .await
-            .expect("router error"),
+    approve_session_via_service_bus(
+        &state,
+        account,
+        created.session_id,
+        created.auth_method,
+        auth_key,
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
 
     let replacement_idempotency = Uuid::new_v4().to_string();
     let replacement_request = Request::builder()
@@ -512,7 +476,8 @@ async fn terminated_session_rejects_inbox_submission() {
 
 #[tokio::test]
 async fn pre_shared_key_sessions_authenticate_successfully() {
-    let app = router(AppState::default());
+    let state = AppState::default();
+    let app = router(state.clone());
     let account = "acct-psk";
     let auth_key = "shared-pre-key";
 
@@ -541,34 +506,14 @@ async fn pre_shared_key_sessions_authenticate_successfully() {
     .await;
     assert_eq!(status, StatusCode::CREATED);
 
-    let approve_idempotency = Uuid::new_v4().to_string();
-    let approve_request = Request::builder()
-        .method(http::Method::POST)
-        .uri(format!(
-            "/trade-agent/v1/sessions/{}/approve",
-            created.session_id
-        ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("X-TradeAgent-Account", account)
-        .header("Idempotency-Key", approve_idempotency.as_str())
-        .body(Body::from(
-            json!({
-                "authenticationKey": auth_key,
-            })
-            .to_string(),
-        ))
-        .expect("failed to build approve request");
-
-    let (status, approved) = json_response::<SessionPromotionResponsePayload>(
-        app.clone()
-            .oneshot(approve_request)
-            .await
-            .expect("router error"),
+    approve_session_via_service_bus(
+        &state,
+        account,
+        created.session_id,
+        created.auth_method,
+        auth_key,
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(approved.session_id, created.session_id);
-    assert_eq!(approved.status, SessionStatus::Authenticated);
 
     let outbox_request = Request::builder()
         .method(http::Method::GET)
@@ -615,16 +560,9 @@ struct SessionCreateResponsePayload {
     session_id: Uuid,
     session_token: Uuid,
     status: SessionStatus,
+    auth_method: AuthMethod,
     pending: bool,
     previous_session_terminated: Option<Uuid>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionPromotionResponsePayload {
-    session_id: Uuid,
-    status: SessionStatus,
-    pending: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -663,4 +601,43 @@ struct ErrorResponsePayload {
 struct AckResponsePayload {
     acknowledged_event_id: Uuid,
     remaining_outbox_depth: usize,
+}
+
+async fn approve_session_via_service_bus(
+    state: &AppState,
+    account: &str,
+    session_id: Uuid,
+    auth_method: AuthMethod,
+    auth_key: &str,
+) {
+    let fingerprint = fingerprint_for(account, auth_method, auth_key);
+    match state
+        .apply_admin_command(AdminCommand::Approve(AdminApprovalCommand {
+            account_id: account.to_string(),
+            session_id,
+            auth_key_fingerprint: fingerprint,
+            approved_by: Some("integration-test".to_string()),
+            expires_at: None,
+        }))
+        .await
+        .expect("service bus approval should succeed")
+    {
+        AdminCommandOutcome::SessionAuthenticated(_) => (),
+        outcome => panic!("unexpected admin command outcome: {outcome:?}"),
+    }
+}
+
+fn fingerprint_for(account: &str, method: AuthMethod, auth_key: &str) -> String {
+    let storage_key = match method {
+        AuthMethod::AccountSessionKey => "account_session_key",
+        AuthMethod::PreSharedKey => "pre_shared_key",
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(storage_key.as_bytes());
+    hasher.update(b":");
+    hasher.update(account.as_bytes());
+    hasher.update(b":");
+    hasher.update(auth_key.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
