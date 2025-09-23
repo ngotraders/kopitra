@@ -1,7 +1,7 @@
 # EA Counterparty Gateway TODO
 
 ## Session and Authentication Enhancements
-- [ ] Replace the in-memory session map with a persistent store shared across replicas.
+- [ ] Replace the in-memory session map with a persistent store shared across replicas, persisting the event stream to Azure SQL while keeping live state in memory.
 - [ ] Enforce configurable idle session timeouts and surface metrics for heartbeat compliance.
 
 ## Event Pipeline Improvements

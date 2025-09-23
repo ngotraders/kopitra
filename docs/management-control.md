@@ -14,6 +14,13 @@ The HTTPS endpoints exposed to administrators follow the same header rules as th
 * **Behavior** – When the targeted session is authenticated, the gateway emits an `OrderCommand` into the session outbox. Pending or terminated sessions receive HTTP 409 with diagnostic metadata.
 * **Concurrency** – The gateway enforces a single live session per account/authentication fingerprint. Orders queued for a superseded session automatically fail with `SESSION_NOT_ACTIVE`.
 
+### `GET /trade-agent/v1/sessions/{sessionId}/inbox/logs`
+* **Purpose** – Retrieve EA-originated telemetry such as portfolio snapshots, trade executions, and balance updates that were ingested through the inbox pipeline.
+* **Audience** – Management console views and operational tooling that need to inspect historical EA activity without directly querying the EA.
+* **Headers** – `X-TradeAgent-Account` to scope the tenant plus administrator authentication (e.g., bearer token) applied by the hosting plane.
+* **Query Parameters** – `cursor` (sequence offset), `limit` (up to 500 records), `eventType` (case-insensitive filter), `occurredAfter`, and `occurredBefore` (RFC3339 timestamps) for time-bounded queries.
+* **Behavior** – Responds with `pendingSession`, `nextCursor`, and the ordered `events` collection. Pending sessions are included so operators can review telemetry before authentication completes.
+
 ### Management Azure Functions (`/api/admin/*`)
 The Functions app exposes additional administrative endpoints. Typical patterns include:
 

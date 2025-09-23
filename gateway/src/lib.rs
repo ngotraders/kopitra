@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use time::OffsetDateTime;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -46,6 +46,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/trade-agent/v1/sessions/:session_id/outbox",
             post(queue_outbox_event),
+        )
+        .route(
+            "/trade-agent/v1/sessions/:session_id/inbox/logs",
+            get(fetch_inbox_log),
         )
         .route(
             "/trade-agent/v1/sessions/:session_id/orders",
@@ -698,7 +702,7 @@ struct InboxEvent {
     event_type: String,
     #[serde(default)]
     payload: Value,
-    #[serde(default)]
+    #[serde(default, with = "time::serde::rfc3339::option")]
     occurred_at: Option<OffsetDateTime>,
 }
 
@@ -706,9 +710,12 @@ struct InboxEvent {
 #[serde(rename_all = "camelCase")]
 struct InboundEventRecord {
     id: Uuid,
+    sequence: u64,
     event_type: String,
     payload: Value,
+    #[serde(with = "time::serde::rfc3339::option")]
     occurred_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
     received_at: OffsetDateTime,
 }
 
@@ -806,6 +813,9 @@ const fn default_requires_ack() -> bool {
     true
 }
 
+const DEFAULT_INBOX_LOG_LIMIT: usize = 100;
+const MAX_INBOX_LOG_LIMIT: usize = 500;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutboundEvent {
@@ -838,6 +848,15 @@ struct AckResponse {
 struct InboxResponse {
     accepted: usize,
     pending_session: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InboxLogResponse {
+    session_id: Uuid,
+    pending_session: bool,
+    next_cursor: u64,
+    events: Vec<InboundEventRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -882,6 +901,21 @@ struct OutboxQuery {
     limit: Option<usize>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InboxLogQuery {
+    #[serde(default)]
+    cursor: Option<u64>,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    event_type: Option<String>,
+    #[serde(default)]
+    occurred_after: Option<String>,
+    #[serde(default)]
+    occurred_before: Option<String>,
+}
+
 struct SessionRecord {
     session_id: Uuid,
     session_token: Uuid,
@@ -892,6 +926,7 @@ struct SessionRecord {
     updated_at: OffsetDateTime,
     last_heartbeat_at: Option<OffsetDateTime>,
     next_sequence: u64,
+    next_inbox_sequence: u64,
     outbox: Vec<OutboundEvent>,
     inbox_log: Vec<InboundEventRecord>,
 }
@@ -955,6 +990,7 @@ impl SessionRecord {
             updated_at: now,
             last_heartbeat_at: None,
             next_sequence: 1,
+            next_inbox_sequence: 1,
             outbox: Vec::new(),
             inbox_log: Vec::new(),
         }
@@ -1119,6 +1155,8 @@ impl SessionRecord {
     fn capture_inbox(&mut self, batch: Vec<InboxEvent>) -> Vec<InboundEventRecord> {
         let mut captured = Vec::with_capacity(batch.len());
         for event in batch {
+            let sequence = self.next_inbox_sequence;
+            self.next_inbox_sequence += 1;
             let received_at = current_time();
             let event_type_lower = event.event_type.to_ascii_lowercase();
             if event_type_lower.contains("heartbeat") {
@@ -1131,6 +1169,7 @@ impl SessionRecord {
 
             let record = InboundEventRecord {
                 id: Uuid::new_v4(),
+                sequence,
                 event_type: event.event_type,
                 payload: event.payload,
                 occurred_at: event.occurred_at,
@@ -1172,6 +1211,50 @@ impl SessionRecord {
             Some(limit) => iter.take(limit).cloned().collect(),
             None => iter.cloned().collect(),
         }
+    }
+
+    fn inbox_events_after(
+        &self,
+        cursor: u64,
+        limit: usize,
+        event_type: Option<&str>,
+        occurred_after: Option<OffsetDateTime>,
+        occurred_before: Option<OffsetDateTime>,
+    ) -> Vec<InboundEventRecord> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let mut events: Vec<_> = self
+            .inbox_log
+            .iter()
+            .filter(|event| event.sequence > cursor)
+            .cloned()
+            .collect();
+
+        if let Some(filter) = event_type {
+            events.retain(|event| event.event_type.eq_ignore_ascii_case(filter));
+        }
+
+        if let Some(after) = occurred_after {
+            events.retain(|event| match event.occurred_at {
+                Some(occurred) => occurred >= after,
+                None => event.received_at >= after,
+            });
+        }
+
+        if let Some(before) = occurred_before {
+            events.retain(|event| match event.occurred_at {
+                Some(occurred) => occurred <= before,
+                None => event.received_at <= before,
+            });
+        }
+
+        if events.len() > limit {
+            events.truncate(limit);
+        }
+
+        events
     }
 }
 
@@ -1589,6 +1672,79 @@ async fn queue_outbox_event(
     Ok(stored.into_response())
 }
 
+async fn fetch_inbox_log(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    Query(query): Query<InboxLogQuery>,
+) -> Result<Response, ApiError> {
+    let account = account_from_headers(&headers)?;
+    let InboxLogQuery {
+        cursor,
+        limit,
+        event_type,
+        occurred_after,
+        occurred_before,
+    } = query;
+
+    let occurred_after = parse_optional_rfc3339(occurred_after, "occurredAfter")?;
+    let occurred_before = parse_optional_rfc3339(occurred_before, "occurredBefore")?;
+
+    if let (Some(after), Some(before)) = (occurred_after, occurred_before) {
+        if after > before {
+            return Err(ApiError::bad_request(
+                "invalid_time_range",
+                "occurredAfter must be earlier than or equal to occurredBefore",
+            ));
+        }
+    }
+
+    let limit = limit
+        .unwrap_or(DEFAULT_INBOX_LOG_LIMIT)
+        .min(MAX_INBOX_LOG_LIMIT);
+    let cursor = cursor.unwrap_or_default();
+    let event_type = event_type
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let mut inner = state.inner.lock().await;
+
+    let response = {
+        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
+            return Err(ApiError::unauthorized(
+                "session_missing",
+                "no active session for the supplied account",
+            ));
+        };
+
+        let Some(session) = account_sessions.get_mut_by_session_id(&session_id) else {
+            return Err(ApiError::conflict(
+                "session_mismatch",
+                "the supplied session id does not match the active session",
+            ));
+        };
+
+        let events = session.inbox_events_after(
+            cursor,
+            limit,
+            event_type.as_deref(),
+            occurred_after,
+            occurred_before,
+        );
+
+        let next_cursor = events.last().map(|event| event.sequence).unwrap_or(cursor);
+
+        InboxLogResponse {
+            session_id: session.session_id,
+            pending_session: session.status.is_pending(),
+            next_cursor,
+            events,
+        }
+    };
+
+    Ok((StatusCode::OK, Json(response)).into_response())
+}
+
 async fn queue_trade_order(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1846,6 +2002,33 @@ async fn queue_trade_order(
     state.store_response(storage_key, stored.clone()).await;
 
     Ok(stored.into_response())
+}
+
+fn parse_optional_rfc3339(
+    raw: Option<String>,
+    field: &'static str,
+) -> Result<Option<OffsetDateTime>, ApiError> {
+    match raw {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::bad_request(
+                    "invalid_timestamp",
+                    format!("{field} must not be empty"),
+                ));
+            }
+
+            OffsetDateTime::parse(trimmed, &Rfc3339)
+                .map(Some)
+                .map_err(|_| {
+                    ApiError::bad_request(
+                        "invalid_timestamp",
+                        format!("{field} must be an RFC3339 timestamp"),
+                    )
+                })
+        }
+        None => Ok(None),
+    }
 }
 
 fn account_from_headers(headers: &HeaderMap) -> Result<String, ApiError> {

@@ -339,6 +339,215 @@ async fn pending_session_ingests_events_and_remains_pending() {
 }
 
 #[tokio::test]
+async fn management_can_fetch_inbox_logs_with_filters() {
+    let state = AppState::default();
+    let app = router(state.clone());
+    let account = "acct-telemetry";
+    let auth_key = "telemetry-secret";
+
+    let create_idempotency = Uuid::new_v4().to_string();
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create session request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let session_id = created.session_id;
+    let session_token = created.session_token;
+
+    let telemetry_idempotency = Uuid::new_v4().to_string();
+    let inbox_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions/current/inbox")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", telemetry_idempotency.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::from(
+            json!({
+                "events": [
+                    {
+                        "eventType": "EaSnapshot",
+                        "occurredAt": "2024-06-01T08:00:00Z",
+                        "payload": {
+                            "equity": 105432.10,
+                            "balance": 103876.55,
+                            "currencyPairs": ["EURUSD", "USDJPY", "GBPUSD"],
+                        }
+                    },
+                    {
+                        "eventType": "TradeUpdate",
+                        "occurredAt": "2024-06-02T09:30:00Z",
+                        "payload": {
+                            "ticket": "12345",
+                            "instrument": "EURUSD",
+                            "side": "buy",
+                            "volume": 0.75,
+                        }
+                    },
+                    {
+                        "eventType": "BalanceUpdate",
+                        "occurredAt": "2024-06-03T10:15:00Z",
+                        "payload": {
+                            "balance": 104100.25,
+                            "reason": "deposit",
+                        }
+                    }
+                ]
+            })
+            .to_string(),
+        ))
+        .expect("failed to build telemetry inbox request");
+
+    let (status, inbox_response) = json_response::<InboxResponsePayload>(
+        app.clone()
+            .oneshot(inbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(inbox_response.accepted, 3);
+
+    let logs_request = Request::builder()
+        .method(http::Method::GET)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/inbox/logs?limit=10",
+            session_id
+        ))
+        .header("X-TradeAgent-Account", account)
+        .body(Body::empty())
+        .expect("failed to build inbox logs request");
+
+    let (status, logs) = json_response::<InboxLogResponsePayload>(
+        app.clone()
+            .oneshot(logs_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(logs.session_id, session_id);
+    assert!(logs.pending_session);
+    assert_eq!(logs.events.len(), 3);
+    assert_eq!(logs.next_cursor, logs.events.last().unwrap().sequence);
+    assert_eq!(logs.events[0].event_type, "EaSnapshot");
+    assert!(logs.events[0].occurred_at.as_deref().is_some());
+    assert!(!logs.events[0].received_at.is_empty());
+    assert_eq!(
+        logs.events[0]
+            .payload
+            .get("currencyPairs")
+            .and_then(|value| value.as_array())
+            .map(|pairs| pairs.len()),
+        Some(3)
+    );
+    assert_ne!(logs.events[0].id, logs.events[1].id);
+
+    let first_sequence = logs.events.first().unwrap().sequence;
+
+    let cursor_request = Request::builder()
+        .method(http::Method::GET)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/inbox/logs?cursor={}&limit=10",
+            session_id, first_sequence
+        ))
+        .header("X-TradeAgent-Account", account)
+        .body(Body::empty())
+        .expect("failed to build cursor logs request");
+
+    let (status, cursor_logs) = json_response::<InboxLogResponsePayload>(
+        app.clone()
+            .oneshot(cursor_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(cursor_logs.events.len(), 2);
+
+    let event_type_request = Request::builder()
+        .method(http::Method::GET)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/inbox/logs?eventType=tradeupdate",
+            session_id
+        ))
+        .header("X-TradeAgent-Account", account)
+        .body(Body::empty())
+        .expect("failed to build event type filter request");
+
+    let (status, trade_logs) = json_response::<InboxLogResponsePayload>(
+        app.clone()
+            .oneshot(event_type_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(trade_logs.events.len(), 1);
+    assert_eq!(trade_logs.events[0].event_type, "TradeUpdate");
+
+    let occurred_after = "2024-06-02T00:00:00Z".replace(':', "%3A");
+    let after_request = Request::builder()
+        .method(http::Method::GET)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/inbox/logs?occurredAfter={}",
+            session_id, occurred_after
+        ))
+        .header("X-TradeAgent-Account", account)
+        .body(Body::empty())
+        .expect("failed to build occurredAfter request");
+
+    let (status, after_logs) = json_response::<InboxLogResponsePayload>(
+        app.clone()
+            .oneshot(after_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(after_logs.events.len(), 2);
+
+    let occurred_before = "2024-06-02T12:00:00Z".replace(':', "%3A");
+    let before_request = Request::builder()
+        .method(http::Method::GET)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/inbox/logs?occurredBefore={}",
+            session_id, occurred_before
+        ))
+        .header("X-TradeAgent-Account", account)
+        .body(Body::empty())
+        .expect("failed to build occurredBefore request");
+
+    let (status, before_logs) = json_response::<InboxLogResponsePayload>(
+        app.clone()
+            .oneshot(before_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(before_logs.events.len(), 2);
+}
+
+#[tokio::test]
 async fn session_creation_is_idempotent_and_preempts_previous() {
     let app = router(AppState::default());
     let account = "acct-002";
@@ -1177,6 +1386,220 @@ async fn close_command_requires_position_id() {
     assert_eq!(error.code, "position_id_required");
 }
 
+#[tokio::test]
+async fn management_can_queue_copy_trade_updates() {
+    let state = AppState::default();
+    let app = router(state.clone());
+    let account = "acct-copy-management";
+    let auth_key = "copy-management-secret";
+
+    let create_idempotency = Uuid::new_v4().to_string();
+    let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri("/trade-agent/v1/sessions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", create_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "authenticationKey": auth_key,
+            })
+            .to_string(),
+        ))
+        .expect("failed to build create session request");
+
+    let (status, created) = json_response::<SessionCreateResponsePayload>(
+        app.clone()
+            .oneshot(create_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    approve_session_via_service_bus(
+        &state,
+        account,
+        created.session_id,
+        created.auth_method,
+        auth_key,
+    )
+    .await;
+
+    let session_token = created.session_token;
+
+    let outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build outbox request");
+
+    let (status, initial_outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(initial_outbox.events.len(), 1);
+    let init_ack = &initial_outbox.events[0];
+
+    let init_ack_idempotency = Uuid::new_v4().to_string();
+    let init_ack_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(format!(
+            "/trade-agent/v1/sessions/current/outbox/{}/ack",
+            init_ack.id
+        ))
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", init_ack_idempotency.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build init ack request");
+
+    let (status, ack_response) = json_response::<OutboxAckResponsePayload>(
+        app.clone()
+            .oneshot(init_ack_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ack_response.acknowledged_event_id, init_ack.id);
+    assert_eq!(ack_response.remaining_outbox_depth, 0);
+
+    let empty_outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build empty outbox request");
+
+    let (status, empty_outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(empty_outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(empty_outbox.events.is_empty());
+
+    let copy_idempotency = Uuid::new_v4().to_string();
+    let copy_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(format!(
+            "/trade-agent/v1/sessions/{}/outbox",
+            created.session_id
+        ))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", copy_idempotency.as_str())
+        .body(Body::from(
+            json!({
+                "eventType": "CopyTradeConfig",
+                "payload": {
+                    "groupId": "copy-group-1",
+                    "action": "update",
+                    "parameters": {
+                        "maxDeviationPips": 2.5,
+                        "symbolFilter": ["EURUSD", "USDJPY"],
+                        "riskMultiplier": 1.2,
+                    }
+                }
+            })
+            .to_string(),
+        ))
+        .expect("failed to build copy trade request");
+
+    let (status, enqueue_response) = json_response::<OutboxEnqueueResponsePayload>(
+        app.clone()
+            .oneshot(copy_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(enqueue_response.session_id, created.session_id);
+    assert!(!enqueue_response.pending_session);
+
+    let copy_outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build copy outbox request");
+
+    let (status, copy_outbox) = json_response::<OutboxResponsePayload>(
+        app.clone()
+            .oneshot(copy_outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(copy_outbox.events.len(), 1);
+    let copy_event = &copy_outbox.events[0];
+    assert_eq!(copy_event.event_type, "CopyTradeConfig");
+    assert!(copy_event.requires_ack);
+    assert_eq!(enqueue_response.event_id, copy_event.id);
+    assert_eq!(enqueue_response.sequence, copy_event.sequence);
+    assert_eq!(
+        copy_event
+            .payload
+            .get("parameters")
+            .and_then(|value| value.get("riskMultiplier"))
+            .and_then(|value| value.as_f64()),
+        Some(1.2)
+    );
+
+    let copy_ack_idempotency = Uuid::new_v4().to_string();
+    let copy_ack_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(format!(
+            "/trade-agent/v1/sessions/current/outbox/{}/ack",
+            copy_event.id
+        ))
+        .header("X-TradeAgent-Account", account)
+        .header("Idempotency-Key", copy_ack_idempotency.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build copy ack request");
+
+    let (status, copy_ack) = json_response::<OutboxAckResponsePayload>(
+        app.clone()
+            .oneshot(copy_ack_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(copy_ack.acknowledged_event_id, copy_event.id);
+    assert_eq!(copy_ack.remaining_outbox_depth, 0);
+
+    let final_outbox_request = Request::builder()
+        .method(http::Method::GET)
+        .uri("/trade-agent/v1/sessions/current/outbox")
+        .header("X-TradeAgent-Account", account)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
+        .body(Body::empty())
+        .expect("failed to build final outbox request");
+
+    let (status, final_outbox) = json_response::<OutboxResponsePayload>(
+        app.oneshot(final_outbox_request)
+            .await
+            .expect("router error"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(final_outbox.events.is_empty());
+}
+
 async fn json_response<T>(response: Response) -> (StatusCode, T)
 where
     T: DeserializeOwned + Debug,
@@ -1188,7 +1611,12 @@ where
         .await
         .expect("body collection failed")
         .to_bytes();
-    let payload = serde_json::from_slice(&bytes).expect("failed to deserialize response");
+    let payload = serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+        panic!(
+            "failed to deserialize response: {error} (status: {status}, body: {})",
+            String::from_utf8_lossy(&bytes)
+        )
+    });
     (status, payload)
 }
 
@@ -1212,10 +1640,40 @@ struct InboxResponsePayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct InboxLogResponsePayload {
+    session_id: Uuid,
+    pending_session: bool,
+    next_cursor: u64,
+    events: Vec<InboxLogEventPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InboxLogEventPayload {
+    id: Uuid,
+    sequence: u64,
+    event_type: String,
+    payload: serde_json::Value,
+    #[serde(default)]
+    occurred_at: Option<String>,
+    received_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct OutboxResponsePayload {
     session_id: Uuid,
     pending: bool,
     events: Vec<OutboxEventPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutboxEnqueueResponsePayload {
+    session_id: Uuid,
+    event_id: Uuid,
+    sequence: u64,
+    pending_session: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1252,6 +1710,13 @@ struct TradeOrderResponsePayload {
 struct ErrorResponsePayload {
     code: String,
     message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutboxAckResponsePayload {
+    acknowledged_event_id: Uuid,
+    remaining_outbox_depth: usize,
 }
 
 async fn approve_session_via_service_bus(
