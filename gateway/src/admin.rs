@@ -3,6 +3,7 @@ use std::{env, time::Duration};
 use azure_core::{StatusCode, error::Error as AzureError, new_http_client};
 use azure_messaging_servicebus::prelude::QueueClient;
 use serde::Deserialize;
+use serde_json::Value;
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::{task::JoinHandle, time::sleep};
@@ -11,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     AdminApprovalCommand, AdminCommand, AdminCommandError, AdminCommandOutcome,
-    AdminRejectionCommand, AppState,
+    AdminRejectionCommand, ApiError, AppState, OutboxEventRequest, TradeOrderRequest,
 };
 
 const NAMESPACE_ENV: &str = "EA_SERVICE_BUS_NAMESPACE";
@@ -172,34 +173,7 @@ impl ServiceBusWorker {
 
                         match serde_json::from_str::<AdminBusEnvelope>(&body) {
                             Ok(envelope) => {
-                                let result = match envelope {
-                                    AdminBusEnvelope::AuthApproval(message) => {
-                                        let account = message.account_id.clone();
-                                        let session_id = message.session_id;
-                                        let command = AdminCommand::Approve(AdminApprovalCommand {
-                                            account_id: message.account_id,
-                                            session_id,
-                                            auth_key_fingerprint: message.auth_key_fingerprint,
-                                            approved_by: message.approved_by,
-                                            expires_at: message.expires_at,
-                                        });
-
-                                        handle_command(&state, command, &queue_name, &account).await
-                                    }
-                                    AdminBusEnvelope::AuthReject(message) => {
-                                        let account = message.account_id.clone();
-                                        let session_id = message.session_id;
-                                        let command = AdminCommand::Reject(AdminRejectionCommand {
-                                            account_id: message.account_id,
-                                            session_id,
-                                            auth_key_fingerprint: message.auth_key_fingerprint,
-                                            rejected_by: message.rejected_by,
-                                            reason: message.reason,
-                                        });
-
-                                        handle_command(&state, command, &queue_name, &account).await
-                                    }
-                                };
+                                let result = process_envelope(&state, envelope, &queue_name).await;
 
                                 match result {
                                     Ok(()) => {
@@ -212,11 +186,32 @@ impl ServiceBusWorker {
                                         }
                                     }
                                     Err(error) => {
-                                        warn!(
-                                            queue = %queue_name,
-                                            %error,
-                                            "failed to apply admin command from Service Bus"
-                                        );
+                                        match &error {
+                                            MessageHandlingError::Admin { account, .. } => {
+                                                warn!(
+                                                    queue = %queue_name,
+                                                    account = %account,
+                                                    %error,
+                                                    "failed to apply admin command from Service Bus",
+                                                );
+                                            }
+                                            MessageHandlingError::Api {
+                                                account,
+                                                session,
+                                                source,
+                                            } => {
+                                                warn!(
+                                                    queue = %queue_name,
+                                                    account = %account,
+                                                    session = %session,
+                                                    code = source.code(),
+                                                    status = %source.status(),
+                                                    message = %source.message(),
+                                                    "failed to apply management command from Service Bus",
+                                                );
+                                            }
+                                        }
+
                                         if let Err(delete_error) = lock.delete_message().await {
                                             warn!(
                                                 queue = %queue_name,
@@ -258,6 +253,23 @@ impl ServiceBusWorker {
     }
 }
 
+#[derive(Debug, Error)]
+enum MessageHandlingError {
+    #[error("{source}")]
+    Admin {
+        account: String,
+        #[source]
+        source: AdminCommandError,
+    },
+    #[error("{source}")]
+    Api {
+        account: String,
+        session: Uuid,
+        #[source]
+        source: ApiError,
+    },
+}
+
 async fn handle_command(
     state: &AppState,
     command: AdminCommand,
@@ -293,6 +305,8 @@ async fn handle_command(
 enum AdminBusEnvelope {
     AuthApproval(AuthApprovalMessage),
     AuthReject(AuthRejectMessage),
+    QueueOutboxEvent(OutboxEventMessage),
+    TradeOrder(TradeOrderMessage),
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,4 +333,150 @@ struct AuthRejectMessage {
     rejected_by: Option<String>,
     #[serde(default)]
     reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutboxEventMessage {
+    account_id: String,
+    session_id: Uuid,
+    event_type: String,
+    #[serde(default)]
+    payload: Value,
+    #[serde(default = "default_requires_ack_true")]
+    requires_ack: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TradeOrderMessage {
+    account_id: String,
+    session_id: Uuid,
+    #[serde(flatten)]
+    command: TradeOrderRequest,
+}
+
+const fn default_requires_ack_true() -> bool {
+    true
+}
+
+async fn process_envelope(
+    state: &AppState,
+    envelope: AdminBusEnvelope,
+    queue_name: &str,
+) -> Result<(), MessageHandlingError> {
+    match envelope {
+        AdminBusEnvelope::AuthApproval(message) => {
+            let account = message.account_id.clone();
+            let session_id = message.session_id;
+            let command = AdminCommand::Approve(AdminApprovalCommand {
+                account_id: message.account_id,
+                session_id,
+                auth_key_fingerprint: message.auth_key_fingerprint,
+                approved_by: message.approved_by,
+                expires_at: message.expires_at,
+            });
+
+            handle_command(state, command, queue_name, &account)
+                .await
+                .map_err(|source| MessageHandlingError::Admin { account, source })
+        }
+        AdminBusEnvelope::AuthReject(message) => {
+            let account = message.account_id.clone();
+            let session_id = message.session_id;
+            let command = AdminCommand::Reject(AdminRejectionCommand {
+                account_id: message.account_id,
+                session_id,
+                auth_key_fingerprint: message.auth_key_fingerprint,
+                rejected_by: message.rejected_by,
+                reason: message.reason,
+            });
+
+            handle_command(state, command, queue_name, &account)
+                .await
+                .map_err(|source| MessageHandlingError::Admin { account, source })
+        }
+        AdminBusEnvelope::QueueOutboxEvent(message) => {
+            process_outbox_event(state, message, queue_name).await
+        }
+        AdminBusEnvelope::TradeOrder(message) => {
+            process_trade_order(state, message, queue_name).await
+        }
+    }
+}
+
+async fn process_outbox_event(
+    state: &AppState,
+    message: OutboxEventMessage,
+    queue_name: &str,
+) -> Result<(), MessageHandlingError> {
+    let OutboxEventMessage {
+        account_id,
+        session_id,
+        event_type,
+        payload,
+        requires_ack,
+    } = message;
+
+    let request = OutboxEventRequest {
+        event_type: event_type.clone(),
+        payload,
+        requires_ack,
+    };
+
+    let response = state
+        .enqueue_outbox_event(&account_id, session_id, request)
+        .await
+        .map_err(|source| MessageHandlingError::Api {
+            account: account_id.clone(),
+            session: session_id,
+            source,
+        })?;
+
+    info!(
+        queue = %queue_name,
+        account = %account_id,
+        session = %session_id,
+        event = %response.event_id,
+        event_type = %event_type,
+        pending = response.pending_session,
+        "queued outbox event from Service Bus",
+    );
+
+    Ok(())
+}
+
+async fn process_trade_order(
+    state: &AppState,
+    message: TradeOrderMessage,
+    queue_name: &str,
+) -> Result<(), MessageHandlingError> {
+    let TradeOrderMessage {
+        account_id,
+        session_id,
+        command,
+    } = message;
+
+    let queued = state
+        .enqueue_trade_command(&account_id, session_id, command)
+        .await
+        .map_err(|source| MessageHandlingError::Api {
+            account: account_id.clone(),
+            session: session_id,
+            source,
+        })?;
+
+    info!(
+        queue = %queue_name,
+        account = %account_id,
+        session = %session_id,
+        event = %queued.event_id,
+        command = %queued.command_id,
+        instrument = %queued.instrument,
+        command_type = ?queued.command_type,
+        pending = queued.pending_session,
+        "queued trade command from Service Bus",
+    );
+
+    Ok(())
 }

@@ -9,6 +9,7 @@
 - [ ] Emit structured telemetry for inbox processing, including rejection reasons and latency histograms.
 - [ ] Accept and normalize RFC3339 `occurredAt` timestamps from EA inbox events so agents can supply precise timing metadata.
 - [ ] Introduce replay protection for duplicate heartbeat and status events beyond basic idempotency keys.
+- [ ] Deliver inbox log snapshots to the management plane via Service Bus instead of HTTP polling.
 
 ## Azure Service Bus Integration
 - [ ] Surface Service Bus listener health information on the `/trade-agent/v1/health` endpoint.

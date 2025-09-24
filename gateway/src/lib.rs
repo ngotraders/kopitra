@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -38,22 +38,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/trade-agent/v1/sessions/current/outbox/:event_id/ack",
             post(acknowledge_outbox_event),
-        )
-        .route(
-            "/trade-agent/v1/sessions/:session_id/approve",
-            post(approve_session),
-        )
-        .route(
-            "/trade-agent/v1/sessions/:session_id/outbox",
-            post(queue_outbox_event),
-        )
-        .route(
-            "/trade-agent/v1/sessions/:session_id/inbox/logs",
-            get(fetch_inbox_log),
-        )
-        .route(
-            "/trade-agent/v1/sessions/:session_id/orders",
-            post(queue_trade_order),
         )
         .with_state(state)
 }
@@ -199,16 +183,19 @@ impl AppState {
         self.inner.lock().await.idempotency.get(key).cloned()
     }
 
-    async fn store_response(&self, key: String, stored: StoredResponse) {
-        self.inner.lock().await.idempotency.insert(key, stored);
-    }
-
-    async fn enqueue_outbox_event(
+    pub(crate) async fn enqueue_outbox_event(
         &self,
         account: &str,
         session_id: Uuid,
         request: OutboxEventRequest,
     ) -> Result<OutboxEnqueueResponse, ApiError> {
+        if request.event_type.trim().is_empty() {
+            return Err(ApiError::bad_request(
+                "event_type_empty",
+                "eventType must not be empty",
+            ));
+        }
+
         let mut inner = self.inner.lock().await;
         let account_sessions = inner.sessions.get_mut(account).ok_or_else(|| {
             ApiError::unauthorized(
@@ -249,6 +236,247 @@ impl AppState {
             event_id: event.id,
             sequence: event.sequence,
             pending_session,
+        })
+    }
+
+    pub(crate) async fn enqueue_trade_command(
+        &self,
+        account: &str,
+        session_id: Uuid,
+        request: TradeOrderRequest,
+    ) -> Result<TradeCommandQueued, ApiError> {
+        let TradeOrderRequest {
+            command_type,
+            instrument,
+            order_type,
+            side,
+            volume,
+            price,
+            stop_loss,
+            take_profit,
+            time_in_force,
+            position_id,
+            client_order_id,
+            metadata,
+        } = request;
+
+        let instrument = instrument.trim();
+        if instrument.is_empty() {
+            return Err(ApiError::bad_request(
+                "instrument_empty",
+                "instrument must not be empty",
+            ));
+        }
+        let instrument = instrument.to_string();
+
+        let command_id = Uuid::new_v4();
+        let issued_at = current_time();
+
+        let mut command_payload = json!({
+            "commandId": command_id,
+            "commandType": command_type,
+            "instrument": instrument,
+            "issuedAt": issued_at,
+        });
+
+        let (response_order_type, response_side, response_position_id, response_volume) =
+            match command_type {
+                TradeCommandType::Open => {
+                    let side = side.ok_or_else(|| {
+                        ApiError::bad_request(
+                            "side_required",
+                            "side is required when opening a position",
+                        )
+                    })?;
+
+                    let order_type = order_type.ok_or_else(|| {
+                        ApiError::bad_request(
+                            "order_type_required",
+                            "orderType is required when opening a position",
+                        )
+                    })?;
+
+                    let volume = volume.ok_or_else(|| {
+                        ApiError::bad_request(
+                            "volume_required",
+                            "volume is required when opening a position",
+                        )
+                    })?;
+
+                    if !volume.is_finite() || volume <= 0.0 {
+                        return Err(ApiError::bad_request(
+                            "volume_invalid",
+                            "volume must be greater than zero",
+                        ));
+                    }
+
+                    command_payload["side"] = json!(side);
+                    command_payload["orderType"] = json!(order_type);
+                    command_payload["volume"] = json!(volume);
+
+                    match order_type {
+                        TradeOrderType::Limit
+                        | TradeOrderType::Stop
+                        | TradeOrderType::StopLimit => {
+                            let price = price.ok_or_else(|| {
+                                ApiError::bad_request(
+                                    "price_required",
+                                    "price is required for limit and stop orders",
+                                )
+                            })?;
+
+                            if !price.is_finite() || price <= 0.0 {
+                                return Err(ApiError::bad_request(
+                                    "price_invalid",
+                                    "price must be greater than zero",
+                                ));
+                            }
+
+                            command_payload["price"] = json!(price);
+                        }
+                        TradeOrderType::Market => {
+                            if let Some(price) = price {
+                                if !price.is_finite() || price <= 0.0 {
+                                    return Err(ApiError::bad_request(
+                                        "price_invalid",
+                                        "price must be greater than zero",
+                                    ));
+                                }
+                                command_payload["price"] = json!(price);
+                            }
+                        }
+                    }
+
+                    Ok((Some(order_type), Some(side), None, Some(volume)))
+                }
+                TradeCommandType::Close => {
+                    let position_id = position_id
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .ok_or_else(|| {
+                            ApiError::bad_request(
+                                "position_id_required",
+                                "positionId is required when closing a position",
+                            )
+                        })?;
+
+                    command_payload["positionId"] = Value::String(position_id.to_string());
+
+                    let order_type = order_type.unwrap_or(TradeOrderType::Market);
+                    command_payload["orderType"] = json!(order_type);
+
+                    let mut response_side = None;
+                    if let Some(side) = side {
+                        command_payload["side"] = json!(side);
+                        response_side = Some(side);
+                    }
+
+                    let mut response_volume = None;
+                    if let Some(volume) = volume {
+                        if !volume.is_finite() || volume <= 0.0 {
+                            return Err(ApiError::bad_request(
+                                "volume_invalid",
+                                "volume must be greater than zero",
+                            ));
+                        }
+                        command_payload["volume"] = json!(volume);
+                        response_volume = Some(volume);
+                    }
+
+                    if let Some(price) = price {
+                        if !price.is_finite() || price <= 0.0 {
+                            return Err(ApiError::bad_request(
+                                "price_invalid",
+                                "price must be greater than zero",
+                            ));
+                        }
+                        command_payload["price"] = json!(price);
+                    }
+
+                    Ok((
+                        Some(order_type),
+                        response_side,
+                        Some(position_id.to_string()),
+                        response_volume,
+                    ))
+                }
+            }?;
+
+        if let Some(stop_loss) = stop_loss {
+            if !stop_loss.is_finite() || stop_loss <= 0.0 {
+                return Err(ApiError::bad_request(
+                    "stop_loss_invalid",
+                    "stopLoss must be greater than zero",
+                ));
+            }
+            command_payload["stopLoss"] = json!(stop_loss);
+        }
+
+        if let Some(take_profit) = take_profit {
+            if !take_profit.is_finite() || take_profit <= 0.0 {
+                return Err(ApiError::bad_request(
+                    "take_profit_invalid",
+                    "takeProfit must be greater than zero",
+                ));
+            }
+            command_payload["takeProfit"] = json!(take_profit);
+        }
+
+        if let Some(time_in_force) = time_in_force {
+            command_payload["timeInForce"] = json!(time_in_force);
+        }
+
+        if let Some(metadata) = metadata {
+            command_payload["metadata"] = metadata;
+        }
+
+        if let Some(client_order_id) = client_order_id {
+            let trimmed = client_order_id.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::bad_request(
+                    "client_order_id_empty",
+                    "clientOrderId must not be empty",
+                ));
+            }
+            command_payload["clientOrderId"] = Value::String(trimmed.to_string());
+        }
+
+        let enqueue_response = self
+            .enqueue_outbox_event(
+                account,
+                session_id,
+                OutboxEventRequest {
+                    event_type: "OrderCommand".to_string(),
+                    payload: command_payload,
+                    requires_ack: true,
+                },
+            )
+            .await?;
+
+        info!(
+            account = %account,
+            session = %session_id,
+            event = %enqueue_response.event_id,
+            command = %command_id,
+            instrument = %instrument,
+            command_type = ?command_type,
+            pending = enqueue_response.pending_session,
+            "queued trade command",
+        );
+
+        Ok(TradeCommandQueued {
+            session_id,
+            event_id: enqueue_response.event_id,
+            sequence: enqueue_response.sequence,
+            command_id,
+            pending_session: enqueue_response.pending_session,
+            command_type,
+            instrument,
+            order_type: response_order_type,
+            side: response_side,
+            position_id: response_position_id,
+            volume: response_volume,
         })
     }
 
@@ -480,6 +708,28 @@ impl AppState {
     }
 }
 
+#[cfg(test)]
+impl AppState {
+    async fn insert_session_for_test(&self, account: &str, session: SessionRecord) {
+        let mut inner = self.inner.lock().await;
+        inner
+            .sessions
+            .entry(account.to_string())
+            .or_default()
+            .insert(session);
+    }
+
+    async fn outbox_events_for_test(&self, account: &str, session_id: Uuid) -> Vec<OutboundEvent> {
+        let mut inner = self.inner.lock().await;
+        inner
+            .sessions
+            .get_mut(account)
+            .and_then(|sessions| sessions.get_mut_by_session_id(&session_id))
+            .map(|session| session.outbox.clone())
+            .unwrap_or_default()
+    }
+}
+
 /// Health status payload emitted by the service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -517,7 +767,7 @@ struct ErrorBody {
 
 #[derive(Debug, Error)]
 #[error("{message}")]
-struct ApiError {
+pub(crate) struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
@@ -570,6 +820,18 @@ impl ApiError {
             code: "internal_error",
             message: message.into(),
         }
+    }
+
+    pub(crate) fn code(&self) -> &'static str {
+        self.code
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub(crate) fn status(&self) -> StatusCode {
+        self.status
     }
 }
 
@@ -721,21 +983,21 @@ struct InboundEventRecord {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum TradeCommandType {
+pub(crate) enum TradeCommandType {
     Open,
     Close,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum TradeSide {
+pub(crate) enum TradeSide {
     Buy,
     Sell,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum TradeOrderType {
+pub(crate) enum TradeOrderType {
     Market,
     Limit,
     Stop,
@@ -744,7 +1006,7 @@ enum TradeOrderType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum TradeTimeInForce {
+pub(crate) enum TradeTimeInForce {
     Gtc,
     Gtd,
     Gfd,
@@ -752,9 +1014,9 @@ enum TradeTimeInForce {
     Fok,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TradeOrderRequest {
+pub(crate) struct TradeOrderRequest {
     command_type: TradeCommandType,
     instrument: String,
     #[serde(default)]
@@ -779,9 +1041,9 @@ struct TradeOrderRequest {
     metadata: Option<Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TradeOrderResponse {
+pub(crate) struct TradeCommandQueued {
     session_id: Uuid,
     event_id: Uuid,
     sequence: u64,
@@ -799,9 +1061,9 @@ struct TradeOrderResponse {
     volume: Option<f64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OutboxEventRequest {
+pub(crate) struct OutboxEventRequest {
     event_type: String,
     #[serde(default)]
     payload: Value,
@@ -812,9 +1074,6 @@ struct OutboxEventRequest {
 const fn default_requires_ack() -> bool {
     true
 }
-
-const DEFAULT_INBOX_LOG_LIMIT: usize = 100;
-const MAX_INBOX_LOG_LIMIT: usize = 500;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -850,15 +1109,6 @@ struct InboxResponse {
     pending_session: bool,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InboxLogResponse {
-    session_id: Uuid,
-    pending_session: bool,
-    next_cursor: u64,
-    events: Vec<InboundEventRecord>,
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPromotionResponse {
@@ -884,9 +1134,9 @@ pub enum AdminCommandOutcome {
     SessionRejected(SessionRejectionResponse),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct OutboxEnqueueResponse {
+pub(crate) struct OutboxEnqueueResponse {
     session_id: Uuid,
     event_id: Uuid,
     sequence: u64,
@@ -899,21 +1149,6 @@ struct OutboxQuery {
     cursor: Option<u64>,
     #[serde(default)]
     limit: Option<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InboxLogQuery {
-    #[serde(default)]
-    cursor: Option<u64>,
-    #[serde(default)]
-    limit: Option<usize>,
-    #[serde(default)]
-    event_type: Option<String>,
-    #[serde(default)]
-    occurred_after: Option<String>,
-    #[serde(default)]
-    occurred_before: Option<String>,
 }
 
 struct SessionRecord {
@@ -1211,50 +1446,6 @@ impl SessionRecord {
             Some(limit) => iter.take(limit).cloned().collect(),
             None => iter.cloned().collect(),
         }
-    }
-
-    fn inbox_events_after(
-        &self,
-        cursor: u64,
-        limit: usize,
-        event_type: Option<&str>,
-        occurred_after: Option<OffsetDateTime>,
-        occurred_before: Option<OffsetDateTime>,
-    ) -> Vec<InboundEventRecord> {
-        if limit == 0 {
-            return Vec::new();
-        }
-
-        let mut events: Vec<_> = self
-            .inbox_log
-            .iter()
-            .filter(|event| event.sequence > cursor)
-            .cloned()
-            .collect();
-
-        if let Some(filter) = event_type {
-            events.retain(|event| event.event_type.eq_ignore_ascii_case(filter));
-        }
-
-        if let Some(after) = occurred_after {
-            events.retain(|event| match event.occurred_at {
-                Some(occurred) => occurred >= after,
-                None => event.received_at >= after,
-            });
-        }
-
-        if let Some(before) = occurred_before {
-            events.retain(|event| match event.occurred_at {
-                Some(occurred) => occurred <= before,
-                None => event.received_at <= before,
-            });
-        }
-
-        if events.len() > limit {
-            events.truncate(limit);
-        }
-
-        events
     }
 }
 
@@ -1568,469 +1759,6 @@ async fn acknowledge_outbox_event(
     Ok(stored.into_response())
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionApprovalRequest {
-    authentication_key: String,
-}
-
-async fn approve_session(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<Uuid>,
-    Json(payload): Json<SessionApprovalRequest>,
-) -> Result<Response, ApiError> {
-    let account = account_from_headers(&headers)?;
-    let idempotency = idempotency_key(&headers)?;
-    let storage_key = idempotency_storage_key(
-        "POST",
-        &format!("/trade-agent/v1/sessions/{session_id}/approve"),
-        &account,
-        &idempotency,
-    );
-
-    if let Some(stored) = state.stored_response(&storage_key).await {
-        return Ok(stored.into_response());
-    }
-
-    let promotion = state
-        .promote_session_with_secret(&account, session_id, &payload.authentication_key)
-        .await
-        .map_err(|error| match error {
-            AdminCommandError::SessionMissing => ApiError::unauthorized(
-                "session_missing",
-                "no active session for the supplied account",
-            ),
-            AdminCommandError::SessionMismatch => ApiError::conflict(
-                "session_mismatch",
-                "the supplied session id does not match the active session",
-            ),
-            AdminCommandError::AuthenticationFailed => ApiError::forbidden(
-                "authentication_failed",
-                "the provided authentication key is invalid",
-            ),
-            AdminCommandError::SessionTerminated => ApiError::conflict(
-                "session_terminated",
-                "the session has been terminated and cannot be approved",
-            ),
-            AdminCommandError::AuthenticationKeyEmpty => ApiError::bad_request(
-                "authentication_key_empty",
-                "authentication_key must not be empty",
-            ),
-        })?;
-
-    let stored = StoredResponse::from_json(StatusCode::OK, &promotion)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-
-    state.store_response(storage_key, stored.clone()).await;
-
-    Ok(stored.into_response())
-}
-
-async fn queue_outbox_event(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<Uuid>,
-    Json(payload): Json<OutboxEventRequest>,
-) -> Result<Response, ApiError> {
-    let account = account_from_headers(&headers)?;
-    let idempotency = idempotency_key(&headers)?;
-    let storage_key = idempotency_storage_key(
-        "POST",
-        &format!("/trade-agent/v1/sessions/{session_id}/outbox"),
-        &account,
-        &idempotency,
-    );
-
-    if let Some(stored) = state
-        .inner
-        .lock()
-        .await
-        .idempotency
-        .get(&storage_key)
-        .cloned()
-    {
-        return Ok(stored.into_response());
-    }
-
-    if payload.event_type.trim().is_empty() {
-        return Err(ApiError::bad_request(
-            "event_type_empty",
-            "event_type must not be empty",
-        ));
-    }
-
-    let response = state
-        .enqueue_outbox_event(&account, session_id, payload)
-        .await?;
-
-    let stored = StoredResponse::from_json(StatusCode::ACCEPTED, &response)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-
-    state.store_response(storage_key, stored.clone()).await;
-
-    Ok(stored.into_response())
-}
-
-async fn fetch_inbox_log(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<Uuid>,
-    Query(query): Query<InboxLogQuery>,
-) -> Result<Response, ApiError> {
-    let account = account_from_headers(&headers)?;
-    let InboxLogQuery {
-        cursor,
-        limit,
-        event_type,
-        occurred_after,
-        occurred_before,
-    } = query;
-
-    let occurred_after = parse_optional_rfc3339(occurred_after, "occurredAfter")?;
-    let occurred_before = parse_optional_rfc3339(occurred_before, "occurredBefore")?;
-
-    if let (Some(after), Some(before)) = (occurred_after, occurred_before) {
-        if after > before {
-            return Err(ApiError::bad_request(
-                "invalid_time_range",
-                "occurredAfter must be earlier than or equal to occurredBefore",
-            ));
-        }
-    }
-
-    let limit = limit
-        .unwrap_or(DEFAULT_INBOX_LOG_LIMIT)
-        .min(MAX_INBOX_LOG_LIMIT);
-    let cursor = cursor.unwrap_or_default();
-    let event_type = event_type
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    let mut inner = state.inner.lock().await;
-
-    let response = {
-        let Some(account_sessions) = inner.sessions.get_mut(&account) else {
-            return Err(ApiError::unauthorized(
-                "session_missing",
-                "no active session for the supplied account",
-            ));
-        };
-
-        let Some(session) = account_sessions.get_mut_by_session_id(&session_id) else {
-            return Err(ApiError::conflict(
-                "session_mismatch",
-                "the supplied session id does not match the active session",
-            ));
-        };
-
-        let events = session.inbox_events_after(
-            cursor,
-            limit,
-            event_type.as_deref(),
-            occurred_after,
-            occurred_before,
-        );
-
-        let next_cursor = events.last().map(|event| event.sequence).unwrap_or(cursor);
-
-        InboxLogResponse {
-            session_id: session.session_id,
-            pending_session: session.status.is_pending(),
-            next_cursor,
-            events,
-        }
-    };
-
-    Ok((StatusCode::OK, Json(response)).into_response())
-}
-
-async fn queue_trade_order(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(session_id): Path<Uuid>,
-    Json(payload): Json<TradeOrderRequest>,
-) -> Result<Response, ApiError> {
-    let account = account_from_headers(&headers)?;
-    let idempotency = idempotency_key(&headers)?;
-    let storage_key = idempotency_storage_key(
-        "POST",
-        &format!("/trade-agent/v1/sessions/{session_id}/orders"),
-        &account,
-        &idempotency,
-    );
-
-    if let Some(stored) = state.stored_response(&storage_key).await {
-        return Ok(stored.into_response());
-    }
-
-    let TradeOrderRequest {
-        command_type,
-        instrument,
-        order_type,
-        side,
-        volume,
-        price,
-        stop_loss,
-        take_profit,
-        time_in_force,
-        position_id,
-        client_order_id,
-        metadata,
-    } = payload;
-
-    let instrument = instrument.trim();
-    if instrument.is_empty() {
-        return Err(ApiError::bad_request(
-            "instrument_empty",
-            "instrument must not be empty",
-        ));
-    }
-    let instrument = instrument.to_string();
-
-    let command_id = Uuid::new_v4();
-    let issued_at = current_time();
-
-    let mut command_payload = json!({
-        "commandId": command_id,
-        "commandType": command_type,
-        "instrument": instrument,
-        "issuedAt": issued_at,
-    });
-
-    let (response_order_type, response_side, response_position_id, response_volume) =
-        match command_type {
-            TradeCommandType::Open => {
-                let side = side.ok_or_else(|| {
-                    ApiError::bad_request(
-                        "side_required",
-                        "side is required when opening a position",
-                    )
-                })?;
-
-                let order_type = order_type.ok_or_else(|| {
-                    ApiError::bad_request(
-                        "order_type_required",
-                        "orderType is required when opening a position",
-                    )
-                })?;
-
-                let volume = volume.ok_or_else(|| {
-                    ApiError::bad_request(
-                        "volume_required",
-                        "volume is required when opening a position",
-                    )
-                })?;
-
-                if !volume.is_finite() || volume <= 0.0 {
-                    return Err(ApiError::bad_request(
-                        "volume_invalid",
-                        "volume must be greater than zero",
-                    ));
-                }
-
-                command_payload["side"] = json!(side);
-                command_payload["orderType"] = json!(order_type);
-                command_payload["volume"] = json!(volume);
-
-                match order_type {
-                    TradeOrderType::Limit | TradeOrderType::Stop | TradeOrderType::StopLimit => {
-                        let price = price.ok_or_else(|| {
-                            ApiError::bad_request(
-                                "price_required",
-                                "price is required for limit and stop orders",
-                            )
-                        })?;
-
-                        if !price.is_finite() || price <= 0.0 {
-                            return Err(ApiError::bad_request(
-                                "price_invalid",
-                                "price must be greater than zero",
-                            ));
-                        }
-
-                        command_payload["price"] = json!(price);
-                    }
-                    TradeOrderType::Market => {
-                        if let Some(price) = price {
-                            if !price.is_finite() || price <= 0.0 {
-                                return Err(ApiError::bad_request(
-                                    "price_invalid",
-                                    "price must be greater than zero",
-                                ));
-                            }
-                            command_payload["price"] = json!(price);
-                        }
-                    }
-                }
-
-                Ok((Some(order_type), Some(side), None, Some(volume)))
-            }
-            TradeCommandType::Close => {
-                let position_id = position_id
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        ApiError::bad_request(
-                            "position_id_required",
-                            "positionId is required when closing a position",
-                        )
-                    })?;
-
-                command_payload["positionId"] = Value::String(position_id.to_string());
-
-                let order_type = order_type.unwrap_or(TradeOrderType::Market);
-                command_payload["orderType"] = json!(order_type);
-
-                let mut response_side = None;
-                if let Some(side) = side {
-                    command_payload["side"] = json!(side);
-                    response_side = Some(side);
-                }
-
-                let mut response_volume = None;
-                if let Some(volume) = volume {
-                    if !volume.is_finite() || volume <= 0.0 {
-                        return Err(ApiError::bad_request(
-                            "volume_invalid",
-                            "volume must be greater than zero",
-                        ));
-                    }
-                    command_payload["volume"] = json!(volume);
-                    response_volume = Some(volume);
-                }
-
-                if let Some(price) = price {
-                    if !price.is_finite() || price <= 0.0 {
-                        return Err(ApiError::bad_request(
-                            "price_invalid",
-                            "price must be greater than zero",
-                        ));
-                    }
-                    command_payload["price"] = json!(price);
-                }
-
-                Ok((
-                    Some(order_type),
-                    response_side,
-                    Some(position_id.to_string()),
-                    response_volume,
-                ))
-            }
-        }?;
-
-    if let Some(stop_loss) = stop_loss {
-        if !stop_loss.is_finite() || stop_loss <= 0.0 {
-            return Err(ApiError::bad_request(
-                "stop_loss_invalid",
-                "stopLoss must be greater than zero",
-            ));
-        }
-        command_payload["stopLoss"] = json!(stop_loss);
-    }
-
-    if let Some(take_profit) = take_profit {
-        if !take_profit.is_finite() || take_profit <= 0.0 {
-            return Err(ApiError::bad_request(
-                "take_profit_invalid",
-                "takeProfit must be greater than zero",
-            ));
-        }
-        command_payload["takeProfit"] = json!(take_profit);
-    }
-
-    if let Some(time_in_force) = time_in_force {
-        command_payload["timeInForce"] = json!(time_in_force);
-    }
-
-    if let Some(metadata) = metadata {
-        command_payload["metadata"] = metadata;
-    }
-
-    if let Some(client_order_id) = client_order_id {
-        let trimmed = client_order_id.trim();
-        if trimmed.is_empty() {
-            return Err(ApiError::bad_request(
-                "client_order_id_empty",
-                "clientOrderId must not be empty",
-            ));
-        }
-        command_payload["clientOrderId"] = Value::String(trimmed.to_string());
-    }
-
-    let enqueue_response = state
-        .enqueue_outbox_event(
-            &account,
-            session_id,
-            OutboxEventRequest {
-                event_type: "OrderCommand".to_string(),
-                payload: command_payload,
-                requires_ack: true,
-            },
-        )
-        .await?;
-
-    info!(
-        account = %account,
-        session = %session_id,
-        event = %enqueue_response.event_id,
-        command = %command_id,
-        instrument = %instrument,
-        command_type = ?command_type,
-        pending = enqueue_response.pending_session,
-        "queued trade command",
-    );
-
-    let response = TradeOrderResponse {
-        session_id,
-        event_id: enqueue_response.event_id,
-        sequence: enqueue_response.sequence,
-        command_id,
-        pending_session: enqueue_response.pending_session,
-        command_type,
-        instrument,
-        order_type: response_order_type,
-        side: response_side,
-        position_id: response_position_id,
-        volume: response_volume,
-    };
-
-    let stored = StoredResponse::from_json(StatusCode::ACCEPTED, &response)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-
-    state.store_response(storage_key, stored.clone()).await;
-
-    Ok(stored.into_response())
-}
-
-fn parse_optional_rfc3339(
-    raw: Option<String>,
-    field: &'static str,
-) -> Result<Option<OffsetDateTime>, ApiError> {
-    match raw {
-        Some(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                return Err(ApiError::bad_request(
-                    "invalid_timestamp",
-                    format!("{field} must not be empty"),
-                ));
-            }
-
-            OffsetDateTime::parse(trimmed, &Rfc3339)
-                .map(Some)
-                .map_err(|_| {
-                    ApiError::bad_request(
-                        "invalid_timestamp",
-                        format!("{field} must be an RFC3339 timestamp"),
-                    )
-                })
-        }
-        None => Ok(None),
-    }
-}
-
 fn account_from_headers(headers: &HeaderMap) -> Result<String, ApiError> {
     header_value(headers, "X-TradeAgent-Account", "missing_account_header")
 }
@@ -2250,5 +1978,122 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("operator")
         );
+    }
+
+    #[tokio::test]
+    async fn enqueue_trade_command_generates_outbox_event() {
+        let state = AppState::default();
+        let account = "acct-trade";
+        let auth_hash = hash_secret(AuthMethod::AccountSessionKey, "secret", account);
+        let mut session = SessionRecord::new(AuthMethod::AccountSessionKey, auth_hash.clone());
+        session
+            .promote(&auth_hash)
+            .expect("promotion should succeed");
+        let session_id = session.session_id;
+
+        state.insert_session_for_test(account, session).await;
+
+        let queued = state
+            .enqueue_trade_command(
+                account,
+                session_id,
+                TradeOrderRequest {
+                    command_type: TradeCommandType::Open,
+                    instrument: "EURUSD".to_string(),
+                    order_type: Some(TradeOrderType::Market),
+                    side: Some(TradeSide::Buy),
+                    volume: Some(1.25),
+                    price: None,
+                    stop_loss: Some(1.1),
+                    take_profit: None,
+                    time_in_force: Some(TradeTimeInForce::Gtc),
+                    position_id: None,
+                    client_order_id: Some("client-1".to_string()),
+                    metadata: None,
+                },
+            )
+            .await
+            .expect("trade command should be accepted");
+
+        assert_eq!(queued.session_id, session_id);
+        assert_eq!(queued.command_type, TradeCommandType::Open);
+        assert_eq!(queued.order_type, Some(TradeOrderType::Market));
+        assert_eq!(queued.side, Some(TradeSide::Buy));
+        assert_eq!(queued.volume, Some(1.25));
+        assert_eq!(queued.instrument, "EURUSD");
+
+        let events = state.outbox_events_for_test(account, session_id).await;
+        assert_eq!(events.len(), 2);
+        let event = events.last().expect("missing order event");
+        assert_eq!(event.id, queued.event_id);
+        assert_eq!(event.event_type, "OrderCommand");
+        assert!(event.requires_ack);
+    }
+
+    #[tokio::test]
+    async fn enqueue_trade_command_requires_side_for_open() {
+        let state = AppState::default();
+        let account = "acct-invalid";
+        let auth_hash = hash_secret(AuthMethod::AccountSessionKey, "secret", account);
+        let mut session = SessionRecord::new(AuthMethod::AccountSessionKey, auth_hash.clone());
+        session
+            .promote(&auth_hash)
+            .expect("promotion should succeed");
+        let session_id = session.session_id;
+
+        state.insert_session_for_test(account, session).await;
+
+        let error = state
+            .enqueue_trade_command(
+                account,
+                session_id,
+                TradeOrderRequest {
+                    command_type: TradeCommandType::Open,
+                    instrument: "EURUSD".to_string(),
+                    order_type: Some(TradeOrderType::Market),
+                    side: None,
+                    volume: Some(1.0),
+                    price: None,
+                    stop_loss: None,
+                    take_profit: None,
+                    time_in_force: None,
+                    position_id: None,
+                    client_order_id: None,
+                    metadata: None,
+                },
+            )
+            .await
+            .expect_err("missing side should be rejected");
+
+        assert_eq!(error.code(), "side_required");
+    }
+
+    #[tokio::test]
+    async fn enqueue_outbox_event_rejects_empty_type() {
+        let state = AppState::default();
+        let account = "acct-events";
+        let auth_hash = hash_secret(AuthMethod::AccountSessionKey, "secret", account);
+        let mut session = SessionRecord::new(AuthMethod::AccountSessionKey, auth_hash.clone());
+        session
+            .promote(&auth_hash)
+            .expect("promotion should succeed");
+        let session_id = session.session_id;
+
+        state.insert_session_for_test(account, session).await;
+
+        let error = state
+            .enqueue_outbox_event(
+                account,
+                session_id,
+                OutboxEventRequest {
+                    event_type: "   ".to_string(),
+                    payload: Value::Null,
+                    requires_ack: true,
+                },
+            )
+            .await
+            .expect_err("blank event type should be rejected");
+
+        assert_eq!(error.code(), "event_type_empty");
     }
 }
