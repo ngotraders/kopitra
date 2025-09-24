@@ -1,3 +1,5 @@
+using Kopitra.Cqrs.EventStore;
+using Kopitra.Cqrs.Events;
 using Kopitra.ManagementApi.Accounts;
 using Kopitra.ManagementApi.Automation;
 using Kopitra.ManagementApi.Common.RequestValidation;
@@ -8,14 +10,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults(builder =>
-    {
-        builder.AddApplicationInsights();
-    })
+    .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices(services =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.AddSingleton<IClock, UtcClock>();
+        services.AddSingleton<IEventStore, InMemoryEventStore>();
+        services.AddSingleton<IEventPublisher, NullEventPublisher>();
+        services.AddSingleton<IEventMetadataFactory, DefaultEventMetadataFactory>();
+        services.AddSingleton<IAggregateStore, AggregateStore>();
         services.AddSingleton<IManagementRepository, InMemoryManagementRepository>();
         services.AddSingleton<IAccountService, AccountService>();
         services.AddSingleton<IAutomationTaskService, AutomationTaskService>();

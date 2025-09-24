@@ -1,4 +1,6 @@
+using Kopitra.Cqrs.EventStore;
 using Kopitra.ManagementApi.Automation;
+using Kopitra.ManagementApi.Automation.EventSourcing;
 using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Tests;
 using Xunit;
@@ -13,7 +15,9 @@ public class AutomationTaskServiceTests
     public async Task RunTaskAsync_UpdatesRepositoryAndReturnsRunDetails()
     {
         var repository = new InMemoryManagementRepository(_clock);
-        var service = new AutomationTaskService(repository, _clock);
+        var eventStore = new InMemoryEventStore();
+        var aggregateStore = new AggregateStore(eventStore);
+        var service = new AutomationTaskService(repository, _clock, aggregateStore);
 
         var response = await service.RunTaskAsync("demo", "daily-reconciliation", CancellationToken.None);
 
@@ -26,13 +30,21 @@ public class AutomationTaskServiceTests
         Assert.NotNull(updated);
         Assert.Equal("Pending", updated!.LastExecution.Status);
         Assert.Equal(response.RunId, updated.LastExecution.RunId);
+
+        var aggregate = await aggregateStore.LoadAsync<AutomationTaskAggregate>(AutomationTaskAggregate.BuildId("demo", "daily-reconciliation"), CancellationToken.None);
+        Assert.Equal("demo", aggregate.TenantId);
+        Assert.Equal("daily-reconciliation", aggregate.TaskId);
+        Assert.Equal(0, aggregate.Version);
+        Assert.Single(aggregate.Executions);
+        Assert.Equal(response.RunId, aggregate.Executions[0].RunId);
     }
 
     [Fact]
     public async Task RunTaskAsync_WhenTaskIsMissing_ThrowsNotFound()
     {
         var repository = new InMemoryManagementRepository(_clock);
-        var service = new AutomationTaskService(repository, _clock);
+        var aggregateStore = new AggregateStore(new InMemoryEventStore());
+        var service = new AutomationTaskService(repository, _clock, aggregateStore);
 
         await Assert.ThrowsAsync<AutomationTaskNotFoundException>(() => service.RunTaskAsync("demo", "missing-task", CancellationToken.None));
     }

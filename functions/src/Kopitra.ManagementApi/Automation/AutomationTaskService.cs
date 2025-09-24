@@ -1,3 +1,5 @@
+using Kopitra.Cqrs.EventStore;
+using Kopitra.ManagementApi.Automation.EventSourcing;
 using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Time;
 
@@ -7,11 +9,13 @@ public sealed class AutomationTaskService : IAutomationTaskService
 {
     private readonly IManagementRepository _repository;
     private readonly IClock _clock;
+    private readonly IAggregateStore _aggregateStore;
 
-    public AutomationTaskService(IManagementRepository repository, IClock clock)
+    public AutomationTaskService(IManagementRepository repository, IClock clock, IAggregateStore aggregateStore)
     {
         _repository = repository;
         _clock = clock;
+        _aggregateStore = aggregateStore;
     }
 
     public Task<IReadOnlyList<AutomationTask>> ListTasksAsync(string tenantId, CancellationToken cancellationToken)
@@ -33,17 +37,13 @@ public sealed class AutomationTaskService : IAutomationTaskService
         }
 
         var submittedAt = _clock.UtcNow;
-        var runId = $"{submittedAt:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-
-        var summary = new TaskExecutionSummary(
-            Status: "Pending",
-            StartedAt: submittedAt,
-            CompletedAt: null,
-            RunId: runId,
-            Message: "Task enqueued for execution.");
+        var aggregateId = AutomationTaskAggregate.BuildId(tenantId, taskId);
+        var aggregate = await _aggregateStore.LoadAsync<AutomationTaskAggregate>(aggregateId, cancellationToken);
+        var (summary, response) = aggregate.RegisterRun(tenantId, task, submittedAt);
 
         await _repository.UpdateAutomationTaskExecutionAsync(tenantId, taskId, summary, cancellationToken);
+        await _aggregateStore.SaveAsync(aggregate, cancellationToken);
 
-        return new AutomationTaskRunResponse(task.TaskId, runId, "Accepted", submittedAt, "Task enqueued for execution.");
+        return response;
     }
 }
