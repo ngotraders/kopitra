@@ -1,7 +1,9 @@
-using Kopitra.Cqrs.EventStore;
-using Kopitra.Cqrs.Events;
+using EventFlow.EventStores;
+using EventFlow.EventStores.InMemory;
+using EventFlow.Extensions;
 using Kopitra.ManagementApi.Accounts;
 using Kopitra.ManagementApi.Automation;
+using Kopitra.ManagementApi.Automation.EventSourcing;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Diagnostics;
 using Kopitra.ManagementApi.Infrastructure;
@@ -15,10 +17,13 @@ var host = new HostBuilder()
     {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.AddSingleton<IClock, UtcClock>();
-        services.AddSingleton<IEventStore, InMemoryEventStore>();
-        services.AddSingleton<IEventPublisher, NullEventPublisher>();
-        services.AddSingleton<IEventMetadataFactory, DefaultEventMetadataFactory>();
-        services.AddSingleton<IAggregateStore, AggregateStore>();
+        services.AddLogging();
+        services.AddEventFlow(options => options
+            .AddDefaults(typeof(AutomationTaskAggregate).Assembly)
+            .RegisterServices(collection =>
+            {
+                collection.AddSingleton<IEventPersistence, InMemoryEventPersistence>();
+            }));
         services.AddSingleton<IManagementRepository, InMemoryManagementRepository>();
         services.AddSingleton<IAccountService, AccountService>();
         services.AddSingleton<IAutomationTaskService, AutomationTaskService>();

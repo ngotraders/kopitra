@@ -1,4 +1,6 @@
-using Kopitra.Cqrs.EventStore;
+using EventFlow.Aggregates;
+using EventFlow.Aggregates.ExecutionResults;
+using EventFlow.Core;
 using Kopitra.ManagementApi.Automation.EventSourcing;
 using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Time;
@@ -38,12 +40,22 @@ public sealed class AutomationTaskService : IAutomationTaskService
 
         var submittedAt = _clock.UtcNow;
         var aggregateId = AutomationTaskAggregate.BuildId(tenantId, taskId);
-        var aggregate = await _aggregateStore.LoadAsync<AutomationTaskAggregate>(aggregateId, cancellationToken);
-        var (summary, response) = aggregate.RegisterRun(tenantId, task, submittedAt);
+        AutomationTaskRunExecutionResult? executionResult = null;
 
-        await _repository.UpdateAutomationTaskExecutionAsync(tenantId, taskId, summary, cancellationToken);
-        await _aggregateStore.SaveAsync(aggregate, cancellationToken);
+        await _aggregateStore.UpdateAsync<AutomationTaskAggregate, AutomationTaskAggregateId>(
+            aggregateId,
+            SourceId.New,
+            (aggregate, token) =>
+            {
+                executionResult = aggregate.RegisterRun(tenantId, task, submittedAt);
+                return Task.FromResult<IExecutionResult>(executionResult);
+            },
+            cancellationToken);
 
-        return response;
+        ArgumentNullException.ThrowIfNull(executionResult);
+
+        await _repository.UpdateAutomationTaskExecutionAsync(tenantId, taskId, executionResult.Summary, cancellationToken);
+
+        return executionResult.Response;
     }
 }

@@ -8,8 +8,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kopitra.ManagementApi.Tests
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{17BFDB85-DD60-49C5-8515-F500102A5BF1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kopitra.Cqrs", "src\Kopitra.Cqrs\Kopitra.Cqrs.csproj", "{2CF558CA-E90E-4056-B810-CD26B1B6779B}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,15 +22,8 @@ Global
 		{8C004669-B900-45EA-ABA1-0083065B88EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8C004669-B900-45EA-ABA1-0083065B88EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8C004669-B900-45EA-ABA1-0083065B88EE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2CF558CA-E90E-4056-B810-CD26B1B6779B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2CF558CA-E90E-4056-B810-CD26B1B6779B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2CF558CA-E90E-4056-B810-CD26B1B6779B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2CF558CA-E90E-4056-B810-CD26B1B6779B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{2CF558CA-E90E-4056-B810-CD26B1B6779B} = {17BFDB85-DD60-49C5-8515-F500102A5BF1}
 	EndGlobalSection
 EndGlobal
