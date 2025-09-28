@@ -1,12 +1,28 @@
-using EventFlow.EventStores;
-using EventFlow.EventStores.InMemory;
-using EventFlow.Extensions;
-using Kopitra.ManagementApi.Accounts;
-using Kopitra.ManagementApi.Automation;
-using Kopitra.ManagementApi.Automation.EventSourcing;
+using System.Collections.Generic;
+using Kopitra.Cqrs;
+using Kopitra.Cqrs.Commands;
+using Kopitra.Cqrs.Dispatching;
+using Kopitra.Cqrs.EventStore;
+using Kopitra.Cqrs.Events;
+using Kopitra.Cqrs.Queries;
+using Kopitra.ManagementApi.Application.AdminUsers.Commands;
+using Kopitra.ManagementApi.Application.AdminUsers.Queries;
+using Kopitra.ManagementApi.Application.CopyTrading.Commands;
+using Kopitra.ManagementApi.Application.CopyTrading.Queries;
+using Kopitra.ManagementApi.Application.ExpertAdvisors.Commands;
+using Kopitra.ManagementApi.Application.ExpertAdvisors.Queries;
+using Kopitra.ManagementApi.Application.Integration.Commands;
+using Kopitra.ManagementApi.Application.Integration.Queries;
+using Kopitra.ManagementApi.Application.Notifications.Commands;
 using Kopitra.ManagementApi.Common.RequestValidation;
-using Kopitra.ManagementApi.Diagnostics;
-using Kopitra.ManagementApi.Infrastructure;
+using Kopitra.ManagementApi.Domain.AdminUsers;
+using Kopitra.ManagementApi.Domain.CopyTrading;
+using Kopitra.ManagementApi.Domain.ExpertAdvisors;
+using Kopitra.ManagementApi.Infrastructure.EventLog;
+using Kopitra.ManagementApi.Infrastructure.Idempotency;
+using Kopitra.ManagementApi.Infrastructure.Messaging;
+using Kopitra.ManagementApi.Infrastructure.Projections;
+using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,26 +32,52 @@ var host = new HostBuilder()
     .ConfigureServices(services =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();
-        services.AddSingleton<IClock, UtcClock>();
         services.AddLogging();
-        services.AddEventFlow(options => options
-            .AddDefaults(typeof(AutomationTaskAggregate).Assembly)
-            .RegisterServices(collection =>
-            {
-                collection.AddSingleton<IEventPersistence, InMemoryEventPersistence>();
-            }));
-        services.AddSingleton<IManagementRepository, InMemoryManagementRepository>();
-        services.AddSingleton<IAccountService, AccountService>();
-        services.AddSingleton<IAutomationTaskService, AutomationTaskService>();
+        services.AddSingleton<IClock, UtcClock>();
+        services.AddCqrsInfrastructure();
+        services.AddSingleton<IServiceBusPublisher, InMemoryServiceBusPublisher>();
+        services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+        services.AddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
+        services.AddSingleton<ICopyTradeGroupReadModelStore, InMemoryCopyTradeGroupReadModelStore>();
+        services.AddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
+        services.AddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.AddSingleton<AdminRequestContextFactory>();
-        services.AddSingleton<HealthReporter>();
-        services.AddSingleton<IIdempotencyStore<AutomationTaskRunResponse>>(provider =>
-            new InMemoryIdempotencyStore<AutomationTaskRunResponse>(TimeSpan.FromHours(24), provider.GetRequiredService<IClock>()));
 
-        services.AddSingleton<IHealthContributor>(new StaticHealthContributor("api", true, "Worker process ready."));
-        services.AddSingleton<IHealthContributor>(new StaticHealthContributor("database", true, "Azure SQL integration pending."));
-        services.AddSingleton<IHealthContributor>(new StaticHealthContributor("service-bus", true, "Service Bus bindings deferred."));
-        services.AddSingleton<IHealthContributor>(new StaticHealthContributor("storage", true, "Blob archival pipeline pending."));
+        services.AddScoped<ICommandHandler<RegisterExpertAdvisorCommand, ExpertAdvisorReadModel>, RegisterExpertAdvisorCommandHandler>();
+        services.AddScoped<ICommandHandler<ApproveExpertAdvisorCommand, ExpertAdvisorReadModel>, ApproveExpertAdvisorCommandHandler>();
+        services.AddScoped<ICommandHandler<UpdateExpertAdvisorStatusCommand, ExpertAdvisorReadModel>, UpdateExpertAdvisorStatusCommandHandler>();
+        services.AddScoped<IQueryHandler<GetExpertAdvisorQuery, ExpertAdvisorReadModel?>, GetExpertAdvisorQueryHandler>();
+        services.AddScoped<IQueryHandler<ListExpertAdvisorsQuery, IReadOnlyCollection<ExpertAdvisorReadModel>>, ListExpertAdvisorsQueryHandler>();
+
+        services.AddScoped<ICommandHandler<CreateCopyTradeGroupCommand, CopyTradeGroupReadModel>, CreateCopyTradeGroupCommandHandler>();
+        services.AddScoped<ICommandHandler<UpsertCopyTradeGroupMemberCommand, CopyTradeGroupReadModel>, UpsertCopyTradeGroupMemberCommandHandler>();
+        services.AddScoped<ICommandHandler<RemoveCopyTradeGroupMemberCommand, CopyTradeGroupReadModel>, RemoveCopyTradeGroupMemberCommandHandler>();
+        services.AddScoped<IQueryHandler<GetCopyTradeGroupQuery, CopyTradeGroupReadModel?>, GetCopyTradeGroupQueryHandler>();
+
+        services.AddScoped<ICommandHandler<ProvisionAdminUserCommand, AdminUserReadModel>, ProvisionAdminUserCommandHandler>();
+        services.AddScoped<ICommandHandler<UpdateAdminUserRolesCommand, AdminUserReadModel>, UpdateAdminUserRolesCommandHandler>();
+        services.AddScoped<IQueryHandler<ListAdminUsersQuery, IReadOnlyCollection<AdminUserReadModel>>, ListAdminUsersQueryHandler>();
+        services.AddScoped<ICommandHandler<ConfigureAdminEmailNotificationsCommand, AdminUserReadModel>, ConfigureAdminEmailNotificationsCommandHandler>();
+
+        services.AddScoped<ICommandHandler<RecordEaIntegrationEventCommand, Kopitra.ManagementApi.Domain.Integration.EaIntegrationEvent>, RecordEaIntegrationEventCommandHandler>();
+        services.AddScoped<IQueryHandler<ListEaIntegrationEventsQuery, IReadOnlyCollection<Kopitra.ManagementApi.Domain.Integration.EaIntegrationEvent>>, ListEaIntegrationEventsQueryHandler>();
+
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorProjection>();
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorProjection>();
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorProjection>();
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorMessagingHandler>();
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorMessagingHandler>();
+        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorMessagingHandler>();
+
+        services.AddScoped<IDomainEventHandler<CopyTradeGroupCreated>, CopyTradeGroupProjection>();
+        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberUpserted>, CopyTradeGroupProjection>();
+        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberRemoved>, CopyTradeGroupProjection>();
+        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberUpserted>, CopyTradeGroupMessagingHandler>();
+        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberRemoved>, CopyTradeGroupMessagingHandler>();
+
+        services.AddScoped<IDomainEventHandler<AdminUserProvisioned>, AdminUserProjection>();
+        services.AddScoped<IDomainEventHandler<AdminUserRolesUpdated>, AdminUserProjection>();
+        services.AddScoped<IDomainEventHandler<AdminUserNotificationSettingsUpdated>, AdminUserProjection>();
     })
     .Build();
 
