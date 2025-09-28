@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Commands;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Domain.Integration;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 using Kopitra.ManagementApi.Time;

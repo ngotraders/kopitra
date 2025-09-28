@@ -1,7 +1,10 @@
+using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Commands;
-using Kopitra.Cqrs.EventStore;
+using EventFlow.Aggregates;
+using EventFlow.Core;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Domain.CopyTrading;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
@@ -16,34 +19,48 @@ public sealed record RemoveCopyTradeGroupMemberCommand(
 
 public sealed class RemoveCopyTradeGroupMemberCommandHandler : ICommandHandler<RemoveCopyTradeGroupMemberCommand, CopyTradeGroupReadModel>
 {
-    private readonly AggregateRepository<CopyTradeGroupAggregate, string> _repository;
+    private readonly IAggregateStore _aggregateStore;
     private readonly ICopyTradeGroupReadModelStore _readModelStore;
     private readonly IClock _clock;
 
     public RemoveCopyTradeGroupMemberCommandHandler(
-        AggregateRepository<CopyTradeGroupAggregate, string> repository,
+        IAggregateStore aggregateStore,
         ICopyTradeGroupReadModelStore readModelStore,
         IClock clock)
     {
-        _repository = repository;
+        _aggregateStore = aggregateStore;
         _readModelStore = readModelStore;
         _clock = clock;
     }
 
     public async Task<CopyTradeGroupReadModel> HandleAsync(RemoveCopyTradeGroupMemberCommand command, CancellationToken cancellationToken)
     {
-        var aggregate = await _repository.GetAsync(command.GroupId, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(aggregate.TenantId, command.TenantId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Tenant mismatch for copy trade group member removal.");
-        }
+        var id = CopyTradeGroupId.FromBusinessId(command.GroupId);
+        var timestamp = _clock.UtcNow;
+        await _aggregateStore.UpdateAsync<CopyTradeGroupAggregate, CopyTradeGroupId>(
+            id,
+            SourceId.New,
+            (aggregate, _) =>
+            {
+                if (!string.Equals(aggregate.TenantId, command.TenantId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Tenant mismatch for copy trade group member removal.");
+                }
 
-        aggregate.RemoveMember(command.MemberId, _clock.UtcNow, command.RequestedBy);
-        await _repository.SaveAsync(aggregate, cancellationToken).ConfigureAwait(false);
+                aggregate.RemoveMember(command.MemberId, timestamp, command.RequestedBy);
+                return Task.CompletedTask;
+            },
+            cancellationToken).ConfigureAwait(false);
+
         var readModel = await _readModelStore.GetAsync(command.TenantId, command.GroupId, cancellationToken).ConfigureAwait(false);
         if (readModel is null)
         {
-            throw new InvalidOperationException("Copy trade group read model missing after member removal.");
+            var aggregateState = await _aggregateStore.LoadAsync<CopyTradeGroupAggregate, CopyTradeGroupId>(id, cancellationToken).ConfigureAwait(false);
+            var members = aggregateState.Members.Values
+                .OrderBy(m => m.MemberId)
+                .Select(m => new CopyTradeGroupMemberReadModel(m.MemberId, m.Role, m.RiskStrategy, m.Allocation, m.UpdatedAt, m.UpdatedBy))
+                .ToArray();
+            return new CopyTradeGroupReadModel(aggregateState.TenantId, command.GroupId, aggregateState.GroupName, aggregateState.Description, aggregateState.CreatedBy, aggregateState.CreatedAt, members);
         }
 
         return readModel;

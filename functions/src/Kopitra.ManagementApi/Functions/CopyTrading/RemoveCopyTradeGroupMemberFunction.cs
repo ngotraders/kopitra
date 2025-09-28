@@ -1,7 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Text.Json;
-using Kopitra.Cqrs.Dispatching;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.CopyTrading.Commands;
 using Kopitra.ManagementApi.Application.CopyTrading.Queries;
 using Kopitra.ManagementApi.Common.Http;

@@ -1,7 +1,9 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Commands;
-using Kopitra.Cqrs.EventStore;
+using EventFlow.Aggregates;
+using EventFlow.Core;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Domain.ExpertAdvisors;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
@@ -17,34 +19,44 @@ public sealed record UpdateExpertAdvisorStatusCommand(
 
 public sealed class UpdateExpertAdvisorStatusCommandHandler : ICommandHandler<UpdateExpertAdvisorStatusCommand, ExpertAdvisorReadModel>
 {
-    private readonly AggregateRepository<ExpertAdvisorAggregate, string> _repository;
+    private readonly IAggregateStore _aggregateStore;
     private readonly IExpertAdvisorReadModelStore _readModelStore;
     private readonly IClock _clock;
 
     public UpdateExpertAdvisorStatusCommandHandler(
-        AggregateRepository<ExpertAdvisorAggregate, string> repository,
+        IAggregateStore aggregateStore,
         IExpertAdvisorReadModelStore readModelStore,
         IClock clock)
     {
-        _repository = repository;
+        _aggregateStore = aggregateStore;
         _readModelStore = readModelStore;
         _clock = clock;
     }
 
     public async Task<ExpertAdvisorReadModel> HandleAsync(UpdateExpertAdvisorStatusCommand command, CancellationToken cancellationToken)
     {
-        var aggregate = await _repository.GetAsync(command.ExpertAdvisorId, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(aggregate.TenantId, command.TenantId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Tenant mismatch for expert advisor status change.");
-        }
+        var id = ExpertAdvisorId.FromBusinessId(command.ExpertAdvisorId);
+        var timestamp = _clock.UtcNow;
+        await _aggregateStore.UpdateAsync<ExpertAdvisorAggregate, ExpertAdvisorId>(
+            id,
+            SourceId.New,
+            (aggregate, _) =>
+            {
+                if (!string.Equals(aggregate.TenantId, command.TenantId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Tenant mismatch for expert advisor status change.");
+                }
 
-        aggregate.ChangeStatus(command.Status, command.Reason, _clock.UtcNow);
-        await _repository.SaveAsync(aggregate, cancellationToken).ConfigureAwait(false);
+                aggregate.ChangeStatus(command.Status, command.Reason, timestamp);
+                return Task.CompletedTask;
+            },
+            cancellationToken).ConfigureAwait(false);
+
         var readModel = await _readModelStore.GetAsync(command.TenantId, command.ExpertAdvisorId, cancellationToken).ConfigureAwait(false);
         if (readModel is null)
         {
-            throw new InvalidOperationException("Expert advisor read model missing after status change.");
+            var aggregateState = await _aggregateStore.LoadAsync<ExpertAdvisorAggregate, ExpertAdvisorId>(id, cancellationToken).ConfigureAwait(false);
+            return new ExpertAdvisorReadModel(aggregateState.TenantId, command.ExpertAdvisorId, aggregateState.DisplayName, aggregateState.Description, aggregateState.Status, aggregateState.ApprovedBy, aggregateState.UpdatedAt);
         }
 
         return readModel;

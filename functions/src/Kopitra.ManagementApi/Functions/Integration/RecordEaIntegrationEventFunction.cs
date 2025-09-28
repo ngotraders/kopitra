@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Text.Json;
-using Kopitra.Cqrs.Dispatching;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.Integration.Commands;
 using Kopitra.ManagementApi.Application.Integration.Queries;
 using Kopitra.ManagementApi.Common.Http;

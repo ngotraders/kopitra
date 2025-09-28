@@ -1,10 +1,6 @@
 using System.Collections.Generic;
-using Kopitra.Cqrs;
-using Kopitra.Cqrs.Commands;
-using Kopitra.Cqrs.Dispatching;
-using Kopitra.Cqrs.EventStore;
-using Kopitra.Cqrs.Events;
-using Kopitra.Cqrs.Queries;
+using EventFlow.DependencyInjection.Extensions;
+using EventFlow.Extensions;
 using Kopitra.ManagementApi.Application.AdminUsers.Commands;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
 using Kopitra.ManagementApi.Application.CopyTrading.Commands;
@@ -14,11 +10,12 @@ using Kopitra.ManagementApi.Application.ExpertAdvisors.Queries;
 using Kopitra.ManagementApi.Application.Integration.Commands;
 using Kopitra.ManagementApi.Application.Integration.Queries;
 using Kopitra.ManagementApi.Application.Notifications.Commands;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain.AdminUsers;
-using Kopitra.ManagementApi.Domain.CopyTrading;
-using Kopitra.ManagementApi.Domain.ExpertAdvisors;
+using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
+using Kopitra.ManagementApi.Infrastructure.Eventing;
 using Kopitra.ManagementApi.Infrastructure.Idempotency;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
 using Kopitra.ManagementApi.Infrastructure.Projections;
@@ -34,7 +31,6 @@ var host = new HostBuilder()
         services.AddApplicationInsightsTelemetryWorkerService();
         services.AddLogging();
         services.AddSingleton<IClock, UtcClock>();
-        services.AddCqrsInfrastructure();
         services.AddSingleton<IServiceBusPublisher, InMemoryServiceBusPublisher>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
         services.AddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
@@ -42,6 +38,8 @@ var host = new HostBuilder()
         services.AddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
         services.AddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.AddSingleton<AdminRequestContextFactory>();
+        services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
         services.AddScoped<ICommandHandler<RegisterExpertAdvisorCommand, ExpertAdvisorReadModel>, RegisterExpertAdvisorCommandHandler>();
         services.AddScoped<ICommandHandler<ApproveExpertAdvisorCommand, ExpertAdvisorReadModel>, ApproveExpertAdvisorCommandHandler>();
@@ -62,22 +60,12 @@ var host = new HostBuilder()
         services.AddScoped<ICommandHandler<RecordEaIntegrationEventCommand, Kopitra.ManagementApi.Domain.Integration.EaIntegrationEvent>, RecordEaIntegrationEventCommandHandler>();
         services.AddScoped<IQueryHandler<ListEaIntegrationEventsQuery, IReadOnlyCollection<Kopitra.ManagementApi.Domain.Integration.EaIntegrationEvent>>, ListEaIntegrationEventsQueryHandler>();
 
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorMessagingHandler>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorMessagingHandler>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorMessagingHandler>();
+        var eventTypes = ManagementDomainEventTypes.All;
+        services.AddEventFlow(options =>
+            options.AddEvents(eventTypes)
+                   .AddDefaults(typeof(Program).Assembly));
 
-        services.AddScoped<IDomainEventHandler<CopyTradeGroupCreated>, CopyTradeGroupProjection>();
-        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberUpserted>, CopyTradeGroupProjection>();
-        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberRemoved>, CopyTradeGroupProjection>();
-        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberUpserted>, CopyTradeGroupMessagingHandler>();
-        services.AddScoped<IDomainEventHandler<CopyTradeGroupMemberRemoved>, CopyTradeGroupMessagingHandler>();
-
-        services.AddScoped<IDomainEventHandler<AdminUserProvisioned>, AdminUserProjection>();
-        services.AddScoped<IDomainEventHandler<AdminUserRolesUpdated>, AdminUserProjection>();
-        services.AddScoped<IDomainEventHandler<AdminUserNotificationSettingsUpdated>, AdminUserProjection>();
+        services.AddSingleton<IHostedService>(sp => new EventDefinitionSeeder(sp, eventTypes));
     })
     .Build();
 

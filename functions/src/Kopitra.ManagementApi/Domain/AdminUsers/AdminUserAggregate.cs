@@ -1,15 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Kopitra.Cqrs.Aggregates;
+using EventFlow.Aggregates;
 
 namespace Kopitra.ManagementApi.Domain.AdminUsers;
 
-public sealed class AdminUserAggregate : AggregateRoot<string>
+public sealed class AdminUserAggregate : AggregateRoot<AdminUserAggregate, AdminUserId>
 {
     private readonly HashSet<AdminUserRole> _roles = new();
     private readonly HashSet<string> _topics = new(StringComparer.OrdinalIgnoreCase);
 
+    public AdminUserAggregate(AdminUserId id) : base(id)
+    {
+    }
+
     public string TenantId { get; private set; } = string.Empty;
+    public string BusinessId { get; private set; } = string.Empty;
     public string Email { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public bool EmailEnabled { get; private set; }
@@ -19,7 +25,6 @@ public sealed class AdminUserAggregate : AggregateRoot<string>
 
     public void Provision(string tenantId, string userId, string email, string displayName, IEnumerable<AdminUserRole> roles, DateTimeOffset provisionedAt, string provisionedBy)
     {
-        EnsureInitialized(userId);
         if (!string.IsNullOrEmpty(TenantId))
         {
             throw new InvalidOperationException($"Admin user {userId} already exists.");
@@ -36,7 +41,7 @@ public sealed class AdminUserAggregate : AggregateRoot<string>
             return;
         }
 
-        Emit(new AdminUserRolesUpdated(TenantId, Id, roleSet, updatedAt, updatedBy));
+        Emit(new AdminUserRolesUpdated(TenantId, BusinessId, roleSet, updatedAt, updatedBy));
     }
 
     public void UpdateNotificationSettings(bool emailEnabled, IEnumerable<string> topics, DateTimeOffset updatedAt, string updatedBy)
@@ -47,12 +52,13 @@ public sealed class AdminUserAggregate : AggregateRoot<string>
             return;
         }
 
-        Emit(new AdminUserNotificationSettingsUpdated(TenantId, Id, emailEnabled, topicSet, updatedAt, updatedBy));
+        Emit(new AdminUserNotificationSettingsUpdated(TenantId, BusinessId, emailEnabled, topicSet, updatedAt, updatedBy));
     }
 
     private void Apply(AdminUserProvisioned @event)
     {
         TenantId = @event.TenantId;
+        BusinessId = @event.UserId;
         Email = @event.Email;
         DisplayName = @event.DisplayName;
         _roles.Clear();
@@ -60,6 +66,8 @@ public sealed class AdminUserAggregate : AggregateRoot<string>
         {
             _roles.Add(role);
         }
+        EmailEnabled = false;
+        _topics.Clear();
     }
 
     private void Apply(AdminUserRolesUpdated @event)

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Text.Json;
-using Kopitra.Cqrs.Dispatching;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.ExpertAdvisors.Commands;
 using Kopitra.ManagementApi.Application.ExpertAdvisors.Queries;
 using Kopitra.ManagementApi.Common.Http;

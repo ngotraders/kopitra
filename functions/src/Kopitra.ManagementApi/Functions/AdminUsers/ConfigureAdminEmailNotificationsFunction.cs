@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
-using Kopitra.Cqrs.Dispatching;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
 using Kopitra.ManagementApi.Application.Notifications.Commands;
 using Kopitra.ManagementApi.Common.Http;

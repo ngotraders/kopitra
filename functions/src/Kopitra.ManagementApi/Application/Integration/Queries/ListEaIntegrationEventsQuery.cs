@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Queries;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Domain.Integration;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 

@@ -1,5 +1,5 @@
 using System.Net;
-using Kopitra.Cqrs.Dispatching;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.ExpertAdvisors.Queries;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;

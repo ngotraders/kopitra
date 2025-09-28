@@ -1,7 +1,9 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Commands;
-using Kopitra.Cqrs.EventStore;
+using EventFlow.Aggregates;
+using EventFlow.Core;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Domain.CopyTrading;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
@@ -17,29 +19,39 @@ public sealed record CreateCopyTradeGroupCommand(
 
 public sealed class CreateCopyTradeGroupCommandHandler : ICommandHandler<CreateCopyTradeGroupCommand, CopyTradeGroupReadModel>
 {
-    private readonly AggregateRepository<CopyTradeGroupAggregate, string> _repository;
+    private readonly IAggregateStore _aggregateStore;
     private readonly ICopyTradeGroupReadModelStore _readModelStore;
     private readonly IClock _clock;
 
     public CreateCopyTradeGroupCommandHandler(
-        AggregateRepository<CopyTradeGroupAggregate, string> repository,
+        IAggregateStore aggregateStore,
         ICopyTradeGroupReadModelStore readModelStore,
         IClock clock)
     {
-        _repository = repository;
+        _aggregateStore = aggregateStore;
         _readModelStore = readModelStore;
         _clock = clock;
     }
 
     public async Task<CopyTradeGroupReadModel> HandleAsync(CreateCopyTradeGroupCommand command, CancellationToken cancellationToken)
     {
-        var aggregate = await _repository.GetAsync(command.GroupId, cancellationToken).ConfigureAwait(false);
-        aggregate.Create(command.TenantId, command.GroupId, command.Name, command.Description, command.RequestedBy, _clock.UtcNow);
-        await _repository.SaveAsync(aggregate, cancellationToken).ConfigureAwait(false);
+        var id = CopyTradeGroupId.FromBusinessId(command.GroupId);
+        var timestamp = _clock.UtcNow;
+        await _aggregateStore.UpdateAsync<CopyTradeGroupAggregate, CopyTradeGroupId>(
+            id,
+            SourceId.New,
+            (aggregate, _) =>
+            {
+                aggregate.Create(command.TenantId, command.GroupId, command.Name, command.Description, command.RequestedBy, timestamp);
+                return Task.CompletedTask;
+            },
+            cancellationToken).ConfigureAwait(false);
+
         var readModel = await _readModelStore.GetAsync(command.TenantId, command.GroupId, cancellationToken).ConfigureAwait(false);
         if (readModel is null)
         {
-            throw new InvalidOperationException("Copy trade group read model missing after creation.");
+            var aggregateState = await _aggregateStore.LoadAsync<CopyTradeGroupAggregate, CopyTradeGroupId>(id, cancellationToken).ConfigureAwait(false);
+            return new CopyTradeGroupReadModel(aggregateState.TenantId, command.GroupId, aggregateState.GroupName, aggregateState.Description, aggregateState.CreatedBy, aggregateState.CreatedAt, Array.Empty<CopyTradeGroupMemberReadModel>());
         }
 
         return readModel;

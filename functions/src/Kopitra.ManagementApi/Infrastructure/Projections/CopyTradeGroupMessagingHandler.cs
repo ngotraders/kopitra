@@ -1,14 +1,15 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Kopitra.Cqrs.Events;
+using EventFlow.Aggregates;
+using EventFlow.Subscribers;
 using Kopitra.ManagementApi.Domain.CopyTrading;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
 
 namespace Kopitra.ManagementApi.Infrastructure.Projections;
 
 public sealed class CopyTradeGroupMessagingHandler :
-    IDomainEventHandler<CopyTradeGroupMemberUpserted>,
-    IDomainEventHandler<CopyTradeGroupMemberRemoved>
+    ISubscribeSynchronousTo<CopyTradeGroupAggregate, CopyTradeGroupId, CopyTradeGroupMemberUpserted>,
+    ISubscribeSynchronousTo<CopyTradeGroupAggregate, CopyTradeGroupId, CopyTradeGroupMemberRemoved>
 {
     private readonly IServiceBusPublisher _publisher;
 
@@ -17,32 +18,32 @@ public sealed class CopyTradeGroupMessagingHandler :
         _publisher = publisher;
     }
 
-    public Task HandleAsync(DomainEventEnvelope<CopyTradeGroupMemberUpserted> envelope, CancellationToken cancellationToken)
+    public Task HandleAsync(IDomainEvent<CopyTradeGroupAggregate, CopyTradeGroupId, CopyTradeGroupMemberUpserted> domainEvent, CancellationToken cancellationToken)
     {
         var payload = new
         {
-            envelope.Event.TenantId,
-            envelope.Event.GroupId,
-            envelope.Event.MemberId,
-            envelope.Event.Role,
-            envelope.Event.RiskStrategy,
-            envelope.Event.Allocation,
-            envelope.Event.UpdatedBy,
-            envelope.Event.UpdatedAt,
+            domainEvent.AggregateEvent.TenantId,
+            domainEvent.AggregateEvent.GroupId,
+            domainEvent.AggregateEvent.MemberId,
+            domainEvent.AggregateEvent.Role,
+            domainEvent.AggregateEvent.RiskStrategy,
+            domainEvent.AggregateEvent.Allocation,
+            domainEvent.AggregateEvent.UpdatedBy,
+            domainEvent.AggregateEvent.UpdatedAt,
             Type = "copy-trade-member-upserted"
         };
         return _publisher.PublishAsync("copy-trade-members", payload, cancellationToken);
     }
 
-    public Task HandleAsync(DomainEventEnvelope<CopyTradeGroupMemberRemoved> envelope, CancellationToken cancellationToken)
+    public Task HandleAsync(IDomainEvent<CopyTradeGroupAggregate, CopyTradeGroupId, CopyTradeGroupMemberRemoved> domainEvent, CancellationToken cancellationToken)
     {
         var payload = new
         {
-            envelope.Event.TenantId,
-            envelope.Event.GroupId,
-            envelope.Event.MemberId,
-            envelope.Event.RemovedBy,
-            envelope.Event.RemovedAt,
+            domainEvent.AggregateEvent.TenantId,
+            domainEvent.AggregateEvent.GroupId,
+            domainEvent.AggregateEvent.MemberId,
+            domainEvent.AggregateEvent.RemovedBy,
+            domainEvent.AggregateEvent.RemovedAt,
             Type = "copy-trade-member-removed"
         };
         return _publisher.PublishAsync("copy-trade-members", payload, cancellationToken);

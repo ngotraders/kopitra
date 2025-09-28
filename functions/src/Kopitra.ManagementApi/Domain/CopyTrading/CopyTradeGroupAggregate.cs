@@ -1,13 +1,20 @@
-using Kopitra.Cqrs.Aggregates;
+using System;
+using System.Collections.Generic;
+using EventFlow.Aggregates;
 
 namespace Kopitra.ManagementApi.Domain.CopyTrading;
 
-public sealed class CopyTradeGroupAggregate : AggregateRoot<string>
+public sealed class CopyTradeGroupAggregate : AggregateRoot<CopyTradeGroupAggregate, CopyTradeGroupId>
 {
     private readonly Dictionary<string, GroupMemberState> _members = new();
 
+    public CopyTradeGroupAggregate(CopyTradeGroupId id) : base(id)
+    {
+    }
+
     public string TenantId { get; private set; } = string.Empty;
-    public string Name { get; private set; } = string.Empty;
+    public string BusinessId { get; private set; } = string.Empty;
+    public string GroupName { get; private set; } = string.Empty;
     public string? Description { get; private set; }
     public string CreatedBy { get; private set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; private set; }
@@ -16,7 +23,6 @@ public sealed class CopyTradeGroupAggregate : AggregateRoot<string>
 
     public void Create(string tenantId, string groupId, string name, string? description, string createdBy, DateTimeOffset createdAt)
     {
-        EnsureInitialized(groupId);
         if (!string.IsNullOrEmpty(TenantId))
         {
             throw new InvalidOperationException($"Copy trade group {groupId} already exists.");
@@ -32,7 +38,7 @@ public sealed class CopyTradeGroupAggregate : AggregateRoot<string>
             throw new InvalidOperationException("Group must be created before managing members.");
         }
 
-        Emit(new CopyTradeGroupMemberUpserted(TenantId, Id, memberId, role, riskStrategy, allocation, updatedAt, updatedBy));
+        Emit(new CopyTradeGroupMemberUpserted(TenantId, BusinessId, memberId, role, riskStrategy, allocation, updatedAt, updatedBy));
     }
 
     public void RemoveMember(string memberId, DateTimeOffset removedAt, string removedBy)
@@ -42,13 +48,14 @@ public sealed class CopyTradeGroupAggregate : AggregateRoot<string>
             return;
         }
 
-        Emit(new CopyTradeGroupMemberRemoved(TenantId, Id, memberId, removedAt, removedBy));
+        Emit(new CopyTradeGroupMemberRemoved(TenantId, BusinessId, memberId, removedAt, removedBy));
     }
 
     private void Apply(CopyTradeGroupCreated @event)
     {
         TenantId = @event.TenantId;
-        Name = @event.Name;
+        BusinessId = @event.GroupId;
+        GroupName = @event.Name;
         Description = @event.Description;
         CreatedBy = @event.CreatedBy;
         CreatedAt = @event.CreatedAt;

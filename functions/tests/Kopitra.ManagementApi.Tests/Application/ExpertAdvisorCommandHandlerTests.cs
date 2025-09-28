@@ -1,14 +1,13 @@
 using System;
 using System.Linq;
 using System.Threading;
-using Kopitra.Cqrs;
-using Kopitra.Cqrs.Commands;
-using Kopitra.Cqrs.Dispatching;
-using Kopitra.Cqrs.EventStore;
-using Kopitra.Cqrs.Events;
-using Kopitra.Cqrs.Queries;
+using System.Threading.Tasks;
+using EventFlow.DependencyInjection.Extensions;
+using EventFlow.Extensions;
 using Kopitra.ManagementApi.Application.ExpertAdvisors.Commands;
 using Kopitra.ManagementApi.Application.ExpertAdvisors.Queries;
+using Kopitra.ManagementApi.Common.Cqrs;
+using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.Domain.ExpertAdvisors;
 using Kopitra.ManagementApi.Infrastructure.Idempotency;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
@@ -17,6 +16,7 @@ using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using EventFlow.EventStores;
 
 namespace Kopitra.ManagementApi.Tests.Application;
 
@@ -30,27 +30,20 @@ public class ExpertAdvisorCommandHandlerTests
         services.AddSingleton<IClock, TestClock>();
         services.AddSingleton<IServiceBusPublisher, InMemoryServiceBusPublisher>();
         services.AddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
-        services.AddSingleton<IDomainEventPublisher, DomainEventPublisher>();
-        services.AddSingleton<IEventStore, InMemoryEventStore>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
-        services.AddSingleton<IQueryDispatcher, QueryDispatcher>();
-        services.AddSingleton<ICommandDispatcher, CommandDispatcher>();
-        services.AddSingleton<InMemoryServiceBusPublisher>();
-
-        services.AddScoped(typeof(AggregateRepository<,>));
+        services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
         services.AddScoped<ICommandHandler<RegisterExpertAdvisorCommand, ExpertAdvisorReadModel>, RegisterExpertAdvisorCommandHandler>();
         services.AddScoped<ICommandHandler<ApproveExpertAdvisorCommand, ExpertAdvisorReadModel>, ApproveExpertAdvisorCommandHandler>();
         services.AddScoped<IQueryHandler<GetExpertAdvisorQuery, ExpertAdvisorReadModel?>, GetExpertAdvisorQueryHandler>();
 
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorProjection>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorRegistered>, ExpertAdvisorMessagingHandler>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorApproved>, ExpertAdvisorMessagingHandler>();
-        services.AddScoped<IDomainEventHandler<ExpertAdvisorStatusChanged>, ExpertAdvisorMessagingHandler>();
+        services.AddEventFlow(options =>
+            options.AddEvents(ManagementDomainEventTypes.All)
+                   .AddDefaults(typeof(RegisterExpertAdvisorCommandHandler).Assembly));
 
         var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IEventDefinitionService>().Load(ManagementDomainEventTypes.All);
         var commandDispatcher = provider.GetRequiredService<ICommandDispatcher>();
         var queryDispatcher = provider.GetRequiredService<IQueryDispatcher>();
         var clock = (TestClock)provider.GetRequiredService<IClock>();
