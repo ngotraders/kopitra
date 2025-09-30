@@ -1,9 +1,42 @@
 # Ops Console
 
-The ops console module hosts the management interface for TradeAgentEA. The front-end lives in `web/` and is built with Vite, React, and TypeScript. Storybook documents every UI component with interaction-focused stories, while Vitest provides coverage for hooks and supporting utilities.
+The ops console module hosts the TradeAgentEA management interface. The Vite + React + TypeScript frontend now lives directly in this directory and exposes navigation, metrics, and activity views for operations teams.
 
-## Packages
+## Getting started
 
-- `web/`: Vite application that renders the dashboard experience for operations teams.
+```bash
+npm install
+npm run dev
+```
 
-Refer to `web/README.md` for local development and testing commands.
+Visit http://localhost:5173 to view the console locally.
+
+## Storybook
+
+Storybook documents each UI component with interaction-focused stories. Launch the catalogue with:
+
+```bash
+npm run storybook
+```
+
+Stories live next to their components and each story defines a `play` function that validates expected behaviour using Testing Library helpers.
+
+## Testing
+
+Vitest powers the unit tests for hooks and supporting libraries.
+
+```bash
+npm test
+```
+
+The suite includes coverage for the `useActivitiesFilter` hook that drives dashboard filtering state.
+
+## Formatting
+
+Prettier formats TypeScript, JavaScript, CSS, and Markdown sources. Run the formatter with:
+
+```bash
+npm run format
+```
+
+Use `npm run format:check` in CI environments to verify that files already conform to the formatting rules.

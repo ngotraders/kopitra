@@ -22,7 +22,11 @@ function App({ initialNavId = navigationItems[0].id, onSignOut }: AppProps) {
         onSignOut={onSignOut ?? (() => console.info('Signing out...'))}
       />
       <div className="app__content">
-        <Sidebar items={navigationItems} activeId={activeNav} onSelect={(item) => setActiveNav(item.id)} />
+        <Sidebar
+          items={navigationItems}
+          activeId={activeNav}
+          onSelect={(item) => setActiveNav(item.id)}
+        />
         <main className="app__main">
           <Dashboard />
         </main>

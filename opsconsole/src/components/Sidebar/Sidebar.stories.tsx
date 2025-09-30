@@ -21,9 +21,7 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     const signalsButton = canvas.getByRole('button', { name: /signals/i });
     await userEvent.click(signalsButton);
-    expect(args.onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'signals' }),
-    );
+    expect(args.onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'signals' }));
   },
 };
 
