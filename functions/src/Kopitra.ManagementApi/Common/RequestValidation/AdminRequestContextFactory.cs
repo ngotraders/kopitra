@@ -7,25 +7,22 @@ public sealed class AdminRequestContextFactory
 {
     private const string TenantHeader = "X-TradeAgent-Account";
     private const string IdempotencyHeader = "Idempotency-Key";
+    private const string DefaultTenantId = "console";
 
-    public AdminRequestContext Create(HttpRequestData request, bool requireIdempotencyKey)
+    public AdminRequestContext Create(HttpRequestData request)
     {
-        return Create(request.Headers, requireIdempotencyKey);
+        return Create(request.Headers);
     }
 
-    public AdminRequestContext Create(HttpHeadersCollection headers, bool requireIdempotencyKey)
+    public AdminRequestContext Create(HttpHeadersCollection headers)
     {
         var tenant = ExtractHeaderValue(headers, TenantHeader);
         if (string.IsNullOrWhiteSpace(tenant))
         {
-            throw new HttpRequestValidationException("missing_account_header", "X-TradeAgent-Account header is required.");
+            tenant = DefaultTenantId;
         }
 
         var idempotencyKey = ExtractHeaderValue(headers, IdempotencyHeader);
-        if (requireIdempotencyKey && string.IsNullOrWhiteSpace(idempotencyKey))
-        {
-            throw new HttpRequestValidationException("missing_idempotency_key", "Idempotency-Key header is required.");
-        }
 
         return new AdminRequestContext(tenant, string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey);
     }

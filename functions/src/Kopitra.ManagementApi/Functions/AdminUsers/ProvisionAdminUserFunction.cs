@@ -43,10 +43,7 @@ public sealed class ProvisionAdminUserFunction
     [Function("ProvisionAdminUser")]
     [OpenApiOperation(operationId: "ProvisionAdminUser", tags: new[] { "AdminUsers" }, Summary = "Provision admin user", Description = "Creates a management admin user and configures their roles.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
-    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
-    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
-    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Idempotency key", Description = "Uniquely identifies the request for deduplication.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Idempotency key", Description = "Optional key to guarantee exactly-once processing for retried requests.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ProvisionAdminUserRequest), Required = true, Description = "Admin user provisioning details, including initial roles.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(AdminUserReadModel), Summary = "Admin user provisioned", Description = "The created admin user read model.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers or body are invalid.")]
@@ -57,7 +54,7 @@ public sealed class ProvisionAdminUserFunction
     {
         try
         {
-            var context = _contextFactory.Create(request, requireIdempotencyKey: true);
+            var context = _contextFactory.Create(request);
             var body = await new StreamReader(request.Body).ReadToEndAsync();
             if (string.IsNullOrWhiteSpace(body))
             {
@@ -77,7 +74,8 @@ public sealed class ProvisionAdminUserFunction
             }
 
             var hash = InMemoryIdempotencyStore.ComputeHash(body);
-            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, context.IdempotencyKey!, hash, cancellationToken);
+            var dedupeKey = context.IdempotencyKey ?? $"{request.FunctionContext.FunctionDefinition.Name}:{hash}";
+            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, dedupeKey, hash, cancellationToken);
             if (!result.IsNew)
             {
                 var existing = await _queryDispatcher.DispatchAsync(new ListAdminUsersQuery(context.TenantId), cancellationToken);

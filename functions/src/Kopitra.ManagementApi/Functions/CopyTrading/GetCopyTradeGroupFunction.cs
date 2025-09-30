@@ -27,9 +27,6 @@ public sealed class GetCopyTradeGroupFunction
     [OpenApiOperation(operationId: "GetCopyTradeGroup", tags: new[] { "CopyTradeGroups" }, Summary = "Get copy-trade group", Description = "Retrieves the details of a specific copy-trade group.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
     [OpenApiParameter(name: "groupId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Copy-trade group identifier", Description = "The identifier of the copy-trade group to retrieve.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
-    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(CopyTradeGroupReadModel), Summary = "Copy-trade group", Description = "The requested copy-trade group details.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Summary = "Copy-trade group not found", Description = "No copy-trade group exists with the supplied identifier.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
@@ -40,7 +37,7 @@ public sealed class GetCopyTradeGroupFunction
     {
         try
         {
-            var context = _contextFactory.Create(request, requireIdempotencyKey: false);
+            var context = _contextFactory.Create(request);
             var result = await _queryDispatcher.DispatchAsync(new GetCopyTradeGroupQuery(context.TenantId, groupId), cancellationToken);
             if (result is null)
             {

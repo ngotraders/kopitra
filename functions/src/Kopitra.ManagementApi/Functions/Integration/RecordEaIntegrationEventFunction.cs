@@ -40,10 +40,7 @@ public sealed class RecordEaIntegrationEventFunction
     [Function("RecordEaIntegrationEvent")]
     [OpenApiOperation(operationId: "RecordEaIntegrationEvent", tags: new[] { "Integration" }, Summary = "Record EA integration event", Description = "Persists an integration event received from an expert advisor interface.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
-    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
-    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
-    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Idempotency key", Description = "Uniquely identifies the request for deduplication.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Idempotency key", Description = "Optional key to guarantee exactly-once processing for retried requests.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(RecordEaIntegrationEventRequest), Required = true, Description = "Integration event payload from the expert advisor interface.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Accepted, contentType: "application/json", bodyType: typeof(EaIntegrationEvent), Summary = "Integration event recorded", Description = "The recorded integration event entry.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers or body are invalid.")]
@@ -54,7 +51,7 @@ public sealed class RecordEaIntegrationEventFunction
     {
         try
         {
-            var context = _contextFactory.Create(request, requireIdempotencyKey: true);
+            var context = _contextFactory.Create(request);
             var body = await new StreamReader(request.Body).ReadToEndAsync();
             if (string.IsNullOrWhiteSpace(body))
             {
@@ -68,7 +65,8 @@ public sealed class RecordEaIntegrationEventFunction
             }
 
             var hash = InMemoryIdempotencyStore.ComputeHash(body);
-            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, context.IdempotencyKey!, hash, cancellationToken);
+            var dedupeKey = context.IdempotencyKey ?? $"{request.FunctionContext.FunctionDefinition.Name}:{hash}";
+            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, dedupeKey, hash, cancellationToken);
             if (!result.IsNew)
             {
                 var existing = await _queryDispatcher.DispatchAsync(new ListEaIntegrationEventsQuery(context.TenantId), cancellationToken);

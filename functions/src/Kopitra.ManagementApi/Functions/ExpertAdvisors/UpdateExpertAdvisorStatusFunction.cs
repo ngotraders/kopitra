@@ -41,10 +41,7 @@ public sealed class UpdateExpertAdvisorStatusFunction
     [OpenApiOperation(operationId: "UpdateExpertAdvisorStatus", tags: new[] { "ExpertAdvisors" }, Summary = "Update expert advisor status", Description = "Changes the lifecycle status of an expert advisor.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
     [OpenApiParameter(name: "expertAdvisorId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Expert advisor identifier", Description = "The identifier of the expert advisor to update.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
-    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
-    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Idempotency key", Description = "Uniquely identifies the request for deduplication.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Idempotency key", Description = "Optional key to guarantee exactly-once processing for retried requests.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(UpdateExpertAdvisorStatusRequest), Required = true, Description = "Status change payload including the desired state.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(ExpertAdvisorReadModel), Summary = "Expert advisor updated", Description = "The updated expert advisor read model.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers or body are invalid.")]
@@ -56,7 +53,7 @@ public sealed class UpdateExpertAdvisorStatusFunction
     {
         try
         {
-            var context = _contextFactory.Create(request, requireIdempotencyKey: true);
+            var context = _contextFactory.Create(request);
             var body = await new StreamReader(request.Body).ReadToEndAsync();
             if (string.IsNullOrWhiteSpace(body))
             {
@@ -75,7 +72,8 @@ public sealed class UpdateExpertAdvisorStatusFunction
             }
 
             var hash = InMemoryIdempotencyStore.ComputeHash(body);
-            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, context.IdempotencyKey!, hash, cancellationToken);
+            var dedupeKey = context.IdempotencyKey ?? $"{request.FunctionContext.FunctionDefinition.Name}:{hash}";
+            var result = await _idempotencyStore.TryStoreAsync(context.TenantId, dedupeKey, hash, cancellationToken);
             if (!result.IsNew)
             {
                 var existing = await _queryDispatcher.DispatchAsync(new GetExpertAdvisorQuery(context.TenantId, expertAdvisorId), cancellationToken);

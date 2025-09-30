@@ -27,9 +27,6 @@ public sealed class ListExpertAdvisorsFunction
     [Function("ListExpertAdvisors")]
     [OpenApiOperation(operationId: "ListExpertAdvisors", tags: new[] { "ExpertAdvisors" }, Summary = "List expert advisors", Description = "Retrieves the expert advisors configured for the tenant.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
-    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
-    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(List<ExpertAdvisorReadModel>), Summary = "Expert advisor list", Description = "The available expert advisors for the tenant.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
     public async Task<HttpResponseData> Run(
@@ -38,7 +35,7 @@ public sealed class ListExpertAdvisorsFunction
     {
         try
         {
-            var context = _contextFactory.Create(request, requireIdempotencyKey: false);
+            var context = _contextFactory.Create(request);
             var result = await _queryDispatcher.DispatchAsync(new ListExpertAdvisorsQuery(context.TenantId), cancellationToken);
             return await request.CreateJsonResponseAsync(HttpStatusCode.OK, result, cancellationToken);
         }
