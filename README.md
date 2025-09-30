@@ -69,14 +69,15 @@ The Expert Advisor connects to the Rust counterparty service through a narrow HT
 | Header | Description | Applies To |
 |--------|-------------|------------|
 | `X-TradeAgent-Account` | Identifies the EA account and is used for tenant scoping. Requests lacking the header are rejected with HTTP 400. | All EA-facing endpoints |
-| `Authorization: Bearer <token>` | Session token returned from session creation. | All requests except `POST /sessions` |
 | `Idempotency-Key` | Globally unique string for deduplicating retries within 24 hours. | All mutating endpoints (`POST`, `DELETE`) |
 | `X-TradeAgent-Request-ID` | Client-generated correlation ID echoed in logs and downstream calls. | Optional but recommended for every call |
+
+Session affinity is maintained on the service side using the account header and the active lease; EA calls do not carry a bearer token or additional authorization header.
 
 #### Session Lifecycle
 | Method & Path | Purpose | Request Body | Response (200) |
 |---------------|---------|--------------|----------------|
-| `POST /sessions` | Authenticate the EA and obtain a session token. Reject with HTTP 409 when a lease is already active. | `{ "secret": "<shared-secret>", "clientVersion": "1.4.0" }` | `{ "token": "jwt", "expiresInSeconds": 900, "sessionId": "sess_123" }` |
+| `POST /sessions` | Authenticate the EA and obtain an exclusive session lease. Reject with HTTP 409 when a lease is already active. | `{ "secret": "<shared-secret>", "clientVersion": "1.4.0" }` | `{ "sessionId": "sess_123", "status": "pending", "pending": true }` |
 | `DELETE /sessions/current` | Release the active lease. Safe to retry thanks to `Idempotency-Key`. | _None_ | `{ "status": "released" }` |
 
 #### EA Inbox (EA → Counterparty)
