@@ -25,19 +25,19 @@ public sealed class GetCopyTradeGroupFunction
 
     [Function("GetCopyTradeGroup")]
     [OpenApiOperation(operationId: "GetCopyTradeGroup", tags: new[] { "CopyTradeGroups" }, Summary = "Get copy-trade group", Description = "Retrieves the details of a specific copy-trade group.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiSecurity("bearer_token", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "groupId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Copy-trade group identifier", Description = "The identifier of the copy-trade group to retrieve.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(CopyTradeGroupReadModel), Summary = "Copy-trade group", Description = "The requested copy-trade group details.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Summary = "Copy-trade group not found", Description = "No copy-trade group exists with the supplied identifier.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "admin/copy-trade/groups/{groupId}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/copy-trade/groups/{groupId}")] HttpRequestData request,
         string groupId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var context = _contextFactory.Create(request);
+            var context = await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
             var result = await _queryDispatcher.DispatchAsync(new GetCopyTradeGroupQuery(context.TenantId, groupId), cancellationToken);
             if (result is null)
             {

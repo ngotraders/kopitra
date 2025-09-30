@@ -26,16 +26,16 @@ public sealed class ListExpertAdvisorsFunction
 
     [Function("ListExpertAdvisors")]
     [OpenApiOperation(operationId: "ListExpertAdvisors", tags: new[] { "ExpertAdvisors" }, Summary = "List expert advisors", Description = "Retrieves the expert advisors configured for the tenant.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiSecurity("bearer_token", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(List<ExpertAdvisorReadModel>), Summary = "Expert advisor list", Description = "The available expert advisors for the tenant.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "admin/experts")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/experts")] HttpRequestData request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var context = _contextFactory.Create(request);
+            var context = await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
             var result = await _queryDispatcher.DispatchAsync(new ListExpertAdvisorsQuery(context.TenantId), cancellationToken);
             return await request.CreateJsonResponseAsync(HttpStatusCode.OK, result, cancellationToken);
         }

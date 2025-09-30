@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace Kopitra.ManagementApi.Common.RequestValidation;
 
-public sealed record AdminRequestContext(string TenantId, string? IdempotencyKey);
+public sealed record AdminRequestContext(string TenantId, ClaimsPrincipal Principal);

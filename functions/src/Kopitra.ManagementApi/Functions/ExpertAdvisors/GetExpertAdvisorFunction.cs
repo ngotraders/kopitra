@@ -25,19 +25,19 @@ public sealed class GetExpertAdvisorFunction
 
     [Function("GetExpertAdvisor")]
     [OpenApiOperation(operationId: "GetExpertAdvisor", tags: new[] { "ExpertAdvisors" }, Summary = "Get expert advisor", Description = "Retrieves a single expert advisor by identifier.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiSecurity("bearer_token", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "expertAdvisorId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Expert advisor identifier", Description = "The identifier of the expert advisor to retrieve.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(ExpertAdvisorReadModel), Summary = "Expert advisor", Description = "The requested expert advisor details.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.NotFound, Summary = "Expert advisor not found", Description = "No expert advisor exists with the supplied identifier.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "admin/experts/{expertAdvisorId}")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/experts/{expertAdvisorId}")] HttpRequestData request,
         string expertAdvisorId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var context = _contextFactory.Create(request);
+            var context = await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
             var result = await _queryDispatcher.DispatchAsync(new GetExpertAdvisorQuery(context.TenantId, expertAdvisorId), cancellationToken);
             if (result is null)
             {

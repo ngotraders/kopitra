@@ -26,16 +26,16 @@ public sealed class ListAdminUsersFunction
 
     [Function("ListAdminUsers")]
     [OpenApiOperation(operationId: "ListAdminUsers", tags: new[] { "AdminUsers" }, Summary = "List admin users", Description = "Retrieves the administrative users that can access the management API.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiSecurity("bearer_token", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(List<AdminUserReadModel>), Summary = "Admin users", Description = "The admin users configured for the tenant.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers are invalid.")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "admin/users")] HttpRequestData request,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "admin/users")] HttpRequestData request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var context = _contextFactory.Create(request);
+            var context = await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
             var result = await _queryDispatcher.DispatchAsync(new ListAdminUsersQuery(context.TenantId), cancellationToken);
             return await request.CreateJsonResponseAsync(HttpStatusCode.OK, result, cancellationToken);
         }

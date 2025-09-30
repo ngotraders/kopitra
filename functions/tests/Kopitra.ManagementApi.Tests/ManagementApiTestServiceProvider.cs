@@ -2,8 +2,10 @@ using System;
 using EventFlow.EventStores;
 using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.DependencyInjection;
+using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Time;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Kopitra.ManagementApi.Tests;
 
@@ -16,6 +18,8 @@ internal static class ManagementApiTestServiceProvider
         {
             svc.AddSingleton<TestClock>();
             svc.AddSingleton<IClock>(sp => sp.GetRequiredService<TestClock>());
+            svc.RemoveAll<IAccessTokenValidator>();
+            svc.AddSingleton<IAccessTokenValidator, TestAccessTokenValidator>();
         });
         configureServices?.Invoke(services);
 

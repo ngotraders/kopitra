@@ -15,13 +15,14 @@ using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.Domain.AdminUsers;
+using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 using Kopitra.ManagementApi.Infrastructure.Eventing;
-using Kopitra.ManagementApi.Infrastructure.Idempotency;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
 using Kopitra.ManagementApi.Infrastructure.Projections;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Kopitra.ManagementApi.Time;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -39,12 +40,15 @@ public static class ManagementApiServiceCollectionExtensions
 
         services.TryAddSingleton<IClock, UtcClock>();
         services.TryAddSingleton<IServiceBusPublisher, InMemoryServiceBusPublisher>();
-        services.TryAddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
         services.TryAddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
         services.TryAddSingleton<ICopyTradeGroupReadModelStore, InMemoryCopyTradeGroupReadModelStore>();
         services.TryAddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
         services.TryAddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.TryAddSingleton<AdminRequestContextFactory>();
+        services.TryAddSingleton<IAccessTokenValidator, OidcAccessTokenValidator>();
+
+        services.AddOptions<ManagementAuthenticationOptions>()
+            .BindConfiguration("ManagementApi:Authentication", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
 
         services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
         services.TryAddScoped<IQueryDispatcher, QueryDispatcher>();
