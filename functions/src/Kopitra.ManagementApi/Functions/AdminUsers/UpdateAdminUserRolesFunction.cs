@@ -1,18 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
-using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.AdminUsers.Commands;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure.Idempotency;
+using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 
 namespace Kopitra.ManagementApi.Functions.AdminUsers;
 
@@ -36,6 +41,17 @@ public sealed class UpdateAdminUserRolesFunction
     }
 
     [Function("UpdateAdminUserRoles")]
+    [OpenApiOperation(operationId: "UpdateAdminUserRoles", tags: new[] { "AdminUsers" }, Summary = "Update admin user roles", Description = "Replaces the role assignments for an admin user.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiParameter(name: "userId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Admin user identifier", Description = "The identifier of the admin user to update.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
+    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
+    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Idempotency key", Description = "Uniquely identifies the request for deduplication.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(UpdateAdminUserRolesRequest), Required = true, Description = "Role assignment payload for the admin user.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(AdminUserReadModel), Summary = "Admin user updated", Description = "The updated admin user read model.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers or body are invalid.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Conflict, Summary = "Operation conflict", Description = "A conflicting operation prevented the command from completing.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "put", Route = "admin/users/{userId}/roles")] HttpRequestData request,
         string userId,
@@ -90,5 +106,7 @@ public sealed class UpdateAdminUserRolesFunction
         }
     }
 
-    private sealed record UpdateAdminUserRolesRequest(IReadOnlyCollection<string> Roles, string RequestedBy);
+    private sealed record UpdateAdminUserRolesRequest(
+        IReadOnlyCollection<string>? Roles,
+        [property: Required] string RequestedBy);
 }

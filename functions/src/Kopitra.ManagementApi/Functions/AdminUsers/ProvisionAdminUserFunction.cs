@@ -1,18 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
-using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Application.AdminUsers.Commands;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure.Idempotency;
+using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.OpenApi.Models;
 
 namespace Kopitra.ManagementApi.Functions.AdminUsers;
 
@@ -36,6 +41,16 @@ public sealed class ProvisionAdminUserFunction
     }
 
     [Function("ProvisionAdminUser")]
+    [OpenApiOperation(operationId: "ProvisionAdminUser", tags: new[] { "AdminUsers" }, Summary = "Provision admin user", Description = "Creates a management admin user and configures their roles.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
+    [OpenApiParameter(name: "X-TradeAgent-Account", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Tenant identifier", Description = "Specifies the tenant scope for the request.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiParameter(name: "X-TradeAgent-Request-ID", In = ParameterLocation.Header, Required = false, Type = typeof(string), Summary = "Correlation identifier", Description = "Propagated request identifier for tracing.")]
+    [OpenApiParameter(name: "X-TradeAgent-Sandbox", In = ParameterLocation.Header, Required = false, Type = typeof(bool), Summary = "Sandbox flag", Description = "Marks the request for sandbox-only processing.")]
+    [OpenApiParameter(name: "Idempotency-Key", In = ParameterLocation.Header, Required = true, Type = typeof(string), Summary = "Idempotency key", Description = "Uniquely identifies the request for deduplication.", Visibility = OpenApiVisibilityType.Important)]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(ProvisionAdminUserRequest), Required = true, Description = "Admin user provisioning details, including initial roles.")]
+    [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(AdminUserReadModel), Summary = "Admin user provisioned", Description = "The created admin user read model.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.BadRequest, Summary = "Invalid request", Description = "The request headers or body are invalid.")]
+    [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Conflict, Summary = "Operation conflict", Description = "A conflicting operation prevented the command from completing.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "admin/users")] HttpRequestData request,
         CancellationToken cancellationToken)
@@ -89,5 +104,10 @@ public sealed class ProvisionAdminUserFunction
         }
     }
 
-    private sealed record ProvisionAdminUserRequest(string UserId, string Email, string DisplayName, string RequestedBy, IReadOnlyCollection<string> Roles);
+    private sealed record ProvisionAdminUserRequest(
+        [property: Required] string UserId,
+        [property: Required, EmailAddress] string Email,
+        [property: Required] string DisplayName,
+        [property: Required] string RequestedBy,
+        IReadOnlyCollection<string>? Roles);
 }
