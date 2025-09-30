@@ -75,15 +75,37 @@ The Expert Advisor connects to the Rust counterparty service through a narrow HT
 Session affinity is maintained on the service side using the account header and the active lease; EA calls do not carry a bearer token or additional authorization header.
 
 #### Session Lifecycle
-| Method & Path | Purpose | Request Body | Response (200) |
-|---------------|---------|--------------|----------------|
-| `POST /sessions` | Authenticate the EA and obtain an exclusive session lease. Reject with HTTP 409 when a lease is already active. | `{ "secret": "<shared-secret>", "clientVersion": "1.4.0" }` | `{ "sessionId": "sess_123", "status": "pending", "pending": true }` |
-| `DELETE /sessions/current` | Release the active lease. Safe to retry thanks to `Idempotency-Key`. | _None_ | `{ "status": "released" }` |
+| Method & Path | Purpose |
+|---------------|---------|
+| `POST /sessions` | Authenticate the EA and obtain an exclusive session lease. Reject with HTTP 409 when a lease is already active. |
+| `DELETE /sessions/current` | Release the active lease. Safe to retry thanks to `Idempotency-Key`. |
+
+**Sample `POST /sessions` request**
+
+```json
+{ "secret": "<shared-secret>", "clientVersion": "1.4.0" }
+```
+
+**Sample `POST /sessions` response**
+
+```json
+{ "sessionId": "sess_123", "status": "pending", "pending": true }
+```
+
+**Sample `DELETE /sessions/current` response**
+
+```json
+{ "status": "released" }
+```
 
 #### EA Inbox (EA → Counterparty)
-| Method & Path | Purpose | Request Schema | Response |
-|---------------|---------|----------------|----------|
-| `POST /sessions/current/inbox` | Submit EA telemetry, acknowledgements, and execution notices. | ```json
+| Method & Path | Purpose | Response |
+|---------------|---------|----------|
+| `POST /sessions/current/inbox` | Submit EA telemetry, acknowledgements, and execution notices. | `202 Accepted` with `{ "accepted": 2 }`. Duplicate payloads return the first response. |
+
+**Sample inbox payload**
+
+```json
 {
   "events": [
     {
@@ -99,12 +121,16 @@ Session affinity is maintained on the service side using the account header and 
     }
   ]
 }
-``` | `202 Accepted` with `{ "accepted": 2 }`. Duplicate payloads return the first response. |
+```
 
 #### Counterparty Outbox (Counterparty → EA)
-| Method & Path | Purpose | Response Schema |
-|---------------|---------|-----------------|
-| `GET /sessions/current/outbox?cursor=<sequence>` | Poll for pending events after the provided cursor. When empty, returns `retryAfter` hints for exponential back-off. | ```json
+| Method & Path | Purpose | Response |
+|---------------|---------|----------|
+| `GET /sessions/current/outbox?cursor=<sequence>` | Poll for pending events after the provided cursor. When empty, returns `retryAfter` hints for exponential back-off. | Returns the next batch of ordered events or a keep-alive with `retryAfterMs`. |
+
+**Sample outbox response**
+
+```json
 {
   "cursor": 451,
   "retryAfterMs": 2000,
@@ -122,12 +148,18 @@ Session affinity is maintained on the service side using the account header and 
     }
   ]
 }
-``` |
+```
 
 #### Trade Execution Interfaces
-| Method & Path | Purpose | Request Highlights | Response |
-|---------------|---------|--------------------|----------|
-| `POST /signals` | Primary entry point for trade intents from the EA. Enforces header validation and logs with a monotonic sequence ID. | ```json
+| Method & Path | Purpose | Response |
+|---------------|---------|----------|
+| `POST /signals` | Primary entry point for trade intents from the EA. Enforces header validation and logs with a monotonic sequence ID. | `202 Accepted` with `{ "status": "queued", "sequence": 982 }`. |
+| `POST /executions` | Broker callback endpoint. Payload must include broker ticket identifiers and fill quantities for idempotent reconciliation. | `200 OK` with `{ "status": "recorded" }`. Duplicate notifications return the original body with HTTP 200. |
+| `GET /health` | Standard readiness probe. Includes dependency summaries for SQL, Service Bus, and broker APIs. | JSON body summarizing downstream health. |
+
+**Sample trade signal payload**
+
+```json
 {
   "signalId": "sig_4471",
   "masterOrderId": "mo_8899",
@@ -136,8 +168,11 @@ Session affinity is maintained on the service side using the account header and 
   "volume": 1.2,
   "timeInForce": "GTC"
 }
-``` | `202 Accepted` with `{ "status": "queued", "sequence": 982 }` |
-| `POST /executions` | Broker callback endpoint. Payload must include broker ticket identifiers and fill quantities for idempotent reconciliation. | ```json
+```
+
+**Sample execution callback payload**
+
+```json
 {
   "broker": "Oanda",
   "ticket": "12345678",
@@ -146,10 +181,13 @@ Session affinity is maintained on the service side using the account header and 
   "fillPrice": 132.114,
   "executedAt": "2024-03-27T02:15:44.991Z"
 }
-``` | `200 OK` with `{ "status": "recorded" }`. Duplicate notifications return the original body with HTTP 200. |
-| `GET /health` | Standard readiness probe. Includes dependency summaries for SQL, Service Bus, and broker APIs. | _N/A_ | ```json
+```
+
+**Sample health response**
+
+```json
 { "status": "healthy", "dependencies": { "sql": "ok", "serviceBus": "ok", "brokers": "degraded" }}
-``` |
+```
 
 ## Managed Platform Strategy
 All persistent or stateful resources use managed Azure services so that infrastructure remains low-touch and pay-as-you-go.
@@ -204,9 +242,14 @@ The Rust counterparty service handles synchronous trade execution, while Azure F
 The management surface is intentionally separated from EA traffic. Requests must include an `Authorization` bearer token issued by Azure AD and a `X-TradeAgent-Request-ID` header for traceability. Additional endpoints and contracts are documented in [`docs/management-control.md`](docs/management-control.md); the summary below captures the latest cross-system touchpoints.
 
 #### Counterparty Management Plane (Rust Service)
-| Method & Path | Purpose | Request Shape | Response |
-|---------------|---------|---------------|----------|
-| `POST /trade-agent/v1/sessions/{sessionId}/orders` | Inject orders into an active EA session. Used by automated remediation jobs triggered from the management API. | ```json
+| Method & Path | Purpose | Response |
+|---------------|---------|----------|
+| `POST /trade-agent/v1/sessions/{sessionId}/orders` | Inject orders into an active EA session. Used by automated remediation jobs triggered from the management API. | `202 Accepted` with `{ "status": "queued" }`. |
+| `GET /trade-agent/v1/sessions/{sessionId}/outbox` | Observability endpoint for operators to review pending events before they reach the EA. | Returns the same schema as the EA-facing outbox plus operator metadata. |
+
+**Sample management order command**
+
+```json
 {
   "commandId": "cmd_771",
   "expiresAt": "2024-03-27T02:25:00Z",
@@ -216,8 +259,7 @@ The management surface is intentionally separated from EA traffic. Requests must
     "volume": 1.2
   }
 }
-``` | `202 Accepted` with `{ "status": "queued" }` |
-| `GET /trade-agent/v1/sessions/{sessionId}/outbox` | Observability endpoint for operators to review pending events before they reach the EA. | Returns the same schema as the EA-facing outbox plus operator metadata. |
+```
 
 #### Management Server API (Azure Functions)
 | Method & Path | Purpose | Notes |
