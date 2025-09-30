@@ -1,0 +1,33 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  backdrop-filter: blur(12px);
+}
+
+.app__content {
+  flex: 1;
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.app__main {
+  flex: 1;
+  padding: 1.5rem;
+  background: rgba(248, 250, 252, 0.85);
+  border-radius: 1.5rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1024px) {
+  .app__content {
+    flex-direction: column;
+  }
+
+  .app__main {
+    padding: 1rem;
+  }
+}
