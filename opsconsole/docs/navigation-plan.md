@@ -4,16 +4,20 @@
 
 - Provide dedicated views for user administration, EA and session lifecycle, copy trading groups, and EA state/command operations.
 - Surface copy trading performance so operators can trace notification fan-out, execution conversions, and EA profitability.
+- Deliver a home dashboard that blends recent activity with aggregate statistics for rapid situational awareness.
 - Support role-based access with clear separation between configuration tasks (users, EAs, copy groups) and live operations (EA state + commands).
 - Ensure URLs are predictable, REST-like, and compatible with React Router nested routes for future implementation.
 
 ## High-level Information Architecture
 
-The console prioritizes day-to-day operations while keeping low-frequency administration tasks discoverable but discreet. The sidebar only contains workstreams that operators open repeatedly during a shift. Low-frequency flows (user onboarding, copy group creation) live behind action buttons or secondary menus within their parent areas.
+The console prioritizes day-to-day operations while keeping low-frequency administration tasks discoverable but discreet. The sidebar only contains workstreams that operators open repeatedly during a shift. Low-frequency flows (user onboarding, copy group creation) live behind action buttons or secondary menus within their parent areas. A dashboard-style home screen aggregates cross-domain activity so operators start from a high-signal summary before diving into deeper sections.
 
 ```
 /
-├── /operations (default landing)
+├── /dashboard (default landing)
+│   ├── /dashboard/activity
+│   └── /dashboard/statistics
+├── /operations
 │   ├── /operations/overview
 │   ├── /operations/commands
 │   ├── /operations/history
@@ -46,7 +50,7 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 
 ### Navigation tiers
 
-1. **Primary sidebar** — exposes Operations, Copy Groups, EAs, and the compact Admin section.
+1. **Primary sidebar** — exposes Dashboard, Operations, Copy Groups, EAs, and the compact Admin section.
 2. **Secondary tabs** — nested under each section to drill into detail (e.g., EA details vs. sessions, copy group performance).
 3. **Contextual drawers** — for quick actions (issue command, add user to group, invite user) without losing navigation state.
 
@@ -54,6 +58,9 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 
 | Area | Path | Purpose |
 | --- | --- | --- |
+| Dashboard | `/dashboard` | Landing redirect that selects the activity tab as the primary home view. |
+| Dashboard | `/dashboard/activity` | Real-time activity feed combining command executions, trade fan-out alerts, and incident escalations. |
+| Dashboard | `/dashboard/statistics` | KPI grid with fleet totals, notification-to-fill conversion, and top-performing EAs. |
 | Admin › Users | `/admin/users` | List, filter, and bulk manage users. Quick filters for inactive users and role.
 | Admin › Users | `/admin/users/:userId` | Summary card of the selected user, defaulting to the `overview` tab.
 | Admin › Users | `/admin/users/:userId/permissions` | Manage roles, copy group membership, and EA entitlements.
@@ -74,16 +81,18 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 | Operations | `/operations/history` | Queryable log of executed commands and EA state transitions. |
 | Operations | `/operations/performance` | Cross-group dashboards with conversion funnels and per-EA leaderboards scoped by filters. |
 
-> `/operations` redirects to `/operations/overview` to keep a consistent landing view.
+> `/` redirects to `/dashboard/activity`, while `/dashboard` redirects to `/dashboard/activity` to keep a consistent landing view.
+> `/operations` redirects to `/operations/overview` to preserve the existing operational entry point.
 
 ## Navigation Flow
 
-1. **Landing** – `/operations/overview` surfaces real-time health and serves as the default redirect for signed-in operators.
-2. **On-call interventions** – `/operations/commands` exposes presets and bulk actions with audit trails; `/operations/history` validates outcomes.
-3. **Trade agent session workflows** – from `/trade-agents`, operators can open a trade agent detail page and dive into session-specific URLs for heartbeat checks and log inspection.
-4. **Copy group tuning** – `/copy-groups` surfaces groups; selecting one transitions to `/copy-groups/:groupId` while preserving filters via query params (e.g., `?environment=sandbox`). The `performance` tab highlights notification counts, execution conversions, and EA profit against timeframe and instrument filters.
-5. **Performance analytics** – `/operations/performance` rolls up copy trade KPIs across groups. Query params such as `?range=7d&group=asia-ltf` scope the aggregates without breaking navigation state.
-6. **Administrative upkeep** – `/admin/users` gives tenant admins a dedicated but secondary area. User creation launches a drawer (`drawer:/admin/users/new`) to avoid occupying primary navigation.
+1. **Landing** – `/dashboard/activity` surfaces cross-domain activity and KPI summaries as the signed-in operator's first touch.
+2. **Operational triage** – `/dashboard/statistics` provides high-level conversion metrics, while `/operations/overview` supports deeper drill-down when an anomaly appears.
+3. **On-call interventions** – `/operations/commands` exposes presets and bulk actions with audit trails; `/operations/history` validates outcomes.
+4. **Trade agent session workflows** – from `/trade-agents`, operators can open a trade agent detail page and dive into session-specific URLs for heartbeat checks and log inspection.
+5. **Copy group tuning** – `/copy-groups` surfaces groups; selecting one transitions to `/copy-groups/:groupId` while preserving filters via query params (e.g., `?environment=sandbox`). The `performance` tab highlights notification counts, execution conversions, and EA profit against timeframe and instrument filters.
+6. **Performance analytics** – `/operations/performance` rolls up copy trade KPIs across groups. Query params such as `?range=7d&group=asia-ltf` scope the aggregates without breaking navigation state.
+7. **Administrative upkeep** – `/admin/users` gives tenant admins a dedicated but secondary area. User creation launches a drawer (`drawer:/admin/users/new`) to avoid occupying primary navigation.
 
 ## State Management Considerations
 
@@ -93,6 +102,18 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 - Lazy-load detail routes to keep initial bundle small; operations overview remains highest priority.
 
 ## Use-case Scenarios and Screen Specifications
+
+### Dashboard Activity (`/dashboard/activity`)
+
+- **Primary use case**: Provide a home view that surfaces the most recent operational activity and actionable alerts.
+- **Layout**: Two-column grid with (1) activity timeline aggregating command executions, copy trade notification bursts, and incident escalations, and (2) spotlight cards for open incidents, pending approvals, and follow-up tasks.
+- **Key interactions**: Inline acknowledgement, quick links into operations or trade agent detail pages, time-range selector with auto-refresh.
+
+### Dashboard Statistics (`/dashboard/statistics`)
+
+- **Primary use case**: Offer a KPI-focused snapshot for leadership or shift leads at login.
+- **Layout**: Responsive grid of KPI tiles (active EAs, conversion rate, aggregate P&L, latency distribution), stacked charts for copy trade funnel and per-agent performance, and trend sparklines comparing current period to previous.
+- **Key interactions**: Time range and environment filters, ability to pin KPIs to the activity view, export summary as PDF/CSV.
 
 ### Operations Overview (`/operations/overview`)
 
