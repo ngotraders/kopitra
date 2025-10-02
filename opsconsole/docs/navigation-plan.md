@@ -56,30 +56,30 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 
 ## URL Path Strategy
 
-| Area | Path | Purpose |
-| --- | --- | --- |
-| Dashboard | `/dashboard` | Landing redirect that selects the activity tab as the primary home view. |
-| Dashboard | `/dashboard/activity` | Real-time activity feed combining command executions, trade fan-out alerts, and incident escalations. |
-| Dashboard | `/dashboard/statistics` | KPI grid with fleet totals, notification-to-fill conversion, and top-performing EAs. |
-| Admin › Users | `/admin/users` | List, filter, and bulk manage users. Quick filters for inactive users and role.
-| Admin › Users | `/admin/users/:userId` | Summary card of the selected user, defaulting to the `overview` tab.
-| Admin › Users | `/admin/users/:userId/permissions` | Manage roles, copy group membership, and EA entitlements.
-| Admin › Users | `/admin/users/:userId/activity` | Show recent actions, login events, and queued commands.
-| Trade Agents | `/trade-agents` | Global trade agent catalogue with status, owner, and active session counts. |
-| Trade Agents | `/trade-agents/:agentId` | Trade agent detail landing, surfacing health status, current release, and assigned copy groups. |
-| Trade Agents | `/trade-agents/:agentId/sessions` | Drilldown to live and historical sessions for the trade agent. |
-| Trade Agents | `/trade-agents/:agentId/sessions/:sessionId` | Session detail (broker account, lifecycle events, heartbeat). |
-| Trade Agents | `/trade-agents/:agentId/commands` | Command queue specific to a trade agent (start, stop, reload config). |
-| Copy Groups | `/copy-groups` | List of groups with membership counts and routing status. |
-| Copy Groups | `drawer:/copy-groups/new` | Wizard to define routing rules and membership, launched from "Create" button not sidebar. |
-| Copy Groups | `/copy-groups/:groupId` | Group overview, assigned EAs, and environment. |
-| Copy Groups | `/copy-groups/:groupId/membership` | Manage trader + EA membership, including bulk import. |
-| Copy Groups | `/copy-groups/:groupId/routing` | Configure destinations (brokers, sub-accounts) and weights. |
-| Copy Groups | `/copy-groups/:groupId/performance` | Summaries of copy trade notifications vs. fills plus per-EA profit metrics. |
-| Operations | `/operations/overview` | Snapshot of EA statuses, command backlog, alert feed. |
-| Operations | `/operations/commands` | Real-time command issuance dashboard with presets + audit trail. |
-| Operations | `/operations/history` | Queryable log of executed commands and EA state transitions. |
-| Operations | `/operations/performance` | Cross-group dashboards with conversion funnels and per-EA leaderboards scoped by filters. |
+| Area          | Path                                         | Purpose                                                                                               |
+| ------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Dashboard     | `/dashboard`                                 | Landing redirect that selects the activity tab as the primary home view.                              |
+| Dashboard     | `/dashboard/activity`                        | Real-time activity feed combining command executions, trade fan-out alerts, and incident escalations. |
+| Dashboard     | `/dashboard/statistics`                      | KPI grid with fleet totals, notification-to-fill conversion, and top-performing EAs.                  |
+| Admin › Users | `/admin/users`                               | List, filter, and bulk manage users. Quick filters for inactive users and role.                       |
+| Admin › Users | `/admin/users/:userId`                       | Summary card of the selected user, defaulting to the `overview` tab.                                  |
+| Admin › Users | `/admin/users/:userId/permissions`           | Manage roles, copy group membership, and EA entitlements.                                             |
+| Admin › Users | `/admin/users/:userId/activity`              | Show recent actions, login events, and queued commands.                                               |
+| Trade Agents  | `/trade-agents`                              | Global trade agent catalogue with status, owner, and active session counts.                           |
+| Trade Agents  | `/trade-agents/:agentId`                     | Trade agent detail landing, surfacing health status, current release, and assigned copy groups.       |
+| Trade Agents  | `/trade-agents/:agentId/sessions`            | Drilldown to live and historical sessions for the trade agent.                                        |
+| Trade Agents  | `/trade-agents/:agentId/sessions/:sessionId` | Session detail (broker account, lifecycle events, heartbeat).                                         |
+| Trade Agents  | `/trade-agents/:agentId/commands`            | Command queue specific to a trade agent (start, stop, reload config).                                 |
+| Copy Groups   | `/copy-groups`                               | List of groups with membership counts and routing status.                                             |
+| Copy Groups   | `drawer:/copy-groups/new`                    | Wizard to define routing rules and membership, launched from "Create" button not sidebar.             |
+| Copy Groups   | `/copy-groups/:groupId`                      | Group overview, assigned EAs, and environment.                                                        |
+| Copy Groups   | `/copy-groups/:groupId/membership`           | Manage trader + EA membership, including bulk import.                                                 |
+| Copy Groups   | `/copy-groups/:groupId/routing`              | Configure destinations (brokers, sub-accounts) and weights.                                           |
+| Copy Groups   | `/copy-groups/:groupId/performance`          | Summaries of copy trade notifications vs. fills plus per-EA profit metrics.                           |
+| Operations    | `/operations/overview`                       | Snapshot of EA statuses, command backlog, alert feed.                                                 |
+| Operations    | `/operations/commands`                       | Real-time command issuance dashboard with presets + audit trail.                                      |
+| Operations    | `/operations/history`                        | Queryable log of executed commands and EA state transitions.                                          |
+| Operations    | `/operations/performance`                    | Cross-group dashboards with conversion funnels and per-EA leaderboards scoped by filters.             |
 
 > `/` redirects to `/dashboard/activity`, while `/dashboard` redirects to `/dashboard/activity` to keep a consistent landing view.
 > `/operations` redirects to `/operations/overview` to preserve the existing operational entry point.
