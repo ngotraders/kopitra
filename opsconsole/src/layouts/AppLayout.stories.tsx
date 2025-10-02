@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { expect, within } from '@storybook/test';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from '../contexts';
+import { withQueryClient } from '../test/withQueryClient';
 
 const meta: Meta<typeof AppLayout> = {
   component: AppLayout,
@@ -10,6 +11,7 @@ const meta: Meta<typeof AppLayout> = {
   args: {
     onSignOut: () => undefined,
   },
+  decorators: [withQueryClient],
   render: (args) => (
     <MemoryRouter initialEntries={['/dashboard/activity']}>
       <AuthProvider>

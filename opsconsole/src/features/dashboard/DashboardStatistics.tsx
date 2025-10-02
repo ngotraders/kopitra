@@ -1,4 +1,6 @@
-import { dashboardTrends, statMetrics } from '../../data/console.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchDashboardMetrics } from '../../api/fetchDashboardMetrics.ts';
+import { fetchDashboardTrends } from '../../api/fetchDashboardTrends.ts';
 import { StatCard } from '../../components/StatCard/StatCard.tsx';
 import { useDashboardFilters } from '../../hooks/useDashboardFilters.ts';
 import type { DashboardEnvironmentFilter, DashboardTimeframe } from '../../types/console.ts';
@@ -20,6 +22,16 @@ const ENVIRONMENT_SUMMARY: Record<DashboardEnvironmentFilter, string> = {
 
 export function DashboardStatistics() {
   const { timeframe, environment, setTimeframe, setEnvironment } = useDashboardFilters();
+  const { data: statMetrics = [] } = useQuery({
+    queryKey: ['dashboard', 'metrics'],
+    queryFn: fetchDashboardMetrics,
+    staleTime: 60 * 1000,
+  });
+  const { data: dashboardTrends = [] } = useQuery({
+    queryKey: ['dashboard', 'trends'],
+    queryFn: fetchDashboardTrends,
+    staleTime: 60 * 1000,
+  });
 
   return (
     <div className="dashboard-statistics">

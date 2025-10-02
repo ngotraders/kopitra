@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Header from '../components/Header/Header.tsx';
 import Sidebar from '../components/Sidebar/Sidebar.tsx';
-import { navigationItems } from '../data/console.ts';
+import { fetchConsoleNavigation } from '../api/fetchConsoleNavigation.ts';
 import type { Environment } from '../types/console.ts';
 import { Toast, type ToastProps } from '../components/Toast/Toast.tsx';
 import { useAuthorization } from '../contexts';
@@ -30,6 +31,11 @@ export function AppLayout({ onSignOut }: AppLayoutProps) {
   const { user } = useAuthorization();
   const environment = resolveEnvironment(location.search);
   const [toast, setToast] = useState<LayoutToast | null>(null);
+  const { data: navigationItems = [] } = useQuery({
+    queryKey: ['navigation'],
+    queryFn: fetchConsoleNavigation,
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     const state = location.state as LayoutLocationState | null;

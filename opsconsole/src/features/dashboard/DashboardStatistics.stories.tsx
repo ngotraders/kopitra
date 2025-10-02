@@ -2,11 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { expect, userEvent, within } from '@storybook/test';
 import { MemoryRouter } from 'react-router-dom';
 import { DashboardStatistics } from './DashboardStatistics';
+import { withQueryClient } from '../../test/withQueryClient';
 
 const meta: Meta<typeof DashboardStatistics> = {
   component: DashboardStatistics,
   title: 'Dashboard/DashboardStatistics',
   decorators: [
+    withQueryClient,
     (Story) => (
       <MemoryRouter initialEntries={['/dashboard/statistics']}>
         <Story />

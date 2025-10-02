@@ -9,10 +9,12 @@ import {
   CopyGroupRouting,
   CopyGroupsList,
 } from './CopyGroups';
+import { withQueryClient } from '../../test/withQueryClient';
 
 const meta: Meta<typeof CopyGroupsList> = {
   component: CopyGroupsList,
   title: 'CopyGroups/Catalogue',
+  decorators: [withQueryClient],
 };
 
 export default meta;

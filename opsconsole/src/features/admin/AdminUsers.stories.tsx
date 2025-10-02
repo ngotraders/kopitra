@@ -8,10 +8,12 @@ import {
   AdminUserPermissions,
   AdminUsersList,
 } from './AdminUsers';
+import { withQueryClient } from '../../test/withQueryClient';
 
 const meta: Meta<typeof AdminUsersList> = {
   component: AdminUsersList,
   title: 'Admin/Users',
+  decorators: [withQueryClient],
 };
 
 export default meta;

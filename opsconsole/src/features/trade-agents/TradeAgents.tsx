@@ -1,10 +1,8 @@
 import { formatDistanceToNow } from 'date-fns';
-import {
-  tradeAgentCommands,
-  tradeAgentLogs,
-  tradeAgentSessions,
-  tradeAgents,
-} from '../../data/console.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchTradeAgentDetail } from '../../api/fetchTradeAgentDetail.ts';
+import { fetchTradeAgentSession } from '../../api/fetchTradeAgentSession.ts';
+import { fetchTradeAgents } from '../../api/fetchTradeAgents.ts';
 import type {
   TradeAgentCommand,
   TradeAgentLogEntry,
@@ -35,6 +33,11 @@ function useTradeAgentSessionContext() {
 }
 
 export function TradeAgentsCatalogue() {
+  const { data: tradeAgents = [] } = useQuery({
+    queryKey: ['tradeAgents', 'catalogue'],
+    queryFn: fetchTradeAgents,
+    staleTime: 60 * 1000,
+  });
   return (
     <div className="trade-agents">
       <header className="trade-agents__header">
@@ -78,9 +81,14 @@ export function TradeAgentsCatalogue() {
 
 export function TradeAgentDetailLayout() {
   const { agentId = '' } = useParams();
-  const agent = tradeAgents.find((item) => item.id === agentId);
+  const { data: detail, isError } = useQuery({
+    queryKey: ['tradeAgents', 'detail', agentId],
+    queryFn: () => fetchTradeAgentDetail(agentId),
+    enabled: Boolean(agentId),
+    staleTime: 60 * 1000,
+  });
 
-  if (!agent) {
+  if (!detail || isError) {
     return (
       <div className="trade-agents__empty">
         <h2>Trade agent not found</h2>
@@ -90,10 +98,12 @@ export function TradeAgentDetailLayout() {
     );
   }
 
+  const { agent, sessions, commands } = detail;
+
   const contextValue: TradeAgentDetailContext = {
     agent,
-    sessions: tradeAgentSessions[agent.id] ?? [],
-    commands: tradeAgentCommands[agent.id] ?? [],
+    sessions,
+    commands,
   };
 
   const search = `?environment=${agent.environment.toLowerCase()}`;
@@ -236,12 +246,14 @@ export function TradeAgentCommands() {
 
 export function TradeAgentSessionLayout() {
   const { agentId = '', sessionId = '' } = useParams();
-  const agent = tradeAgents.find((item) => item.id === agentId);
-  const session = agent
-    ? (tradeAgentSessions[agent.id] ?? []).find((item) => item.id === sessionId)
-    : undefined;
+  const { data: detail, isError } = useQuery({
+    queryKey: ['tradeAgents', 'session', agentId, sessionId],
+    queryFn: () => fetchTradeAgentSession(agentId, sessionId),
+    enabled: Boolean(agentId && sessionId),
+    staleTime: 15 * 1000,
+  });
 
-  if (!agent || !session) {
+  if (!detail || isError) {
     return (
       <div className="trade-agents__empty">
         <h2>Session not found</h2>
@@ -251,10 +263,12 @@ export function TradeAgentSessionLayout() {
     );
   }
 
+  const { agent, session, logs } = detail;
+
   const contextValue: TradeAgentSessionContext = {
     agent,
     session,
-    logs: tradeAgentLogs[session.id] ?? [],
+    logs,
   };
 
   const base = `/trade-agents/${agent.id}/sessions/${session.id}`;

@@ -1,10 +1,7 @@
 import { format } from 'date-fns';
-import {
-  copyGroupMembers,
-  copyGroupPerformance,
-  copyGroupRoutes,
-  copyGroupSummaries,
-} from '../../data/console.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchCopyGroupDetail } from '../../api/fetchCopyGroupDetail.ts';
+import { fetchCopyGroupSummaries } from '../../api/fetchCopyGroupSummaries.ts';
 import type {
   CopyGroupMember,
   CopyGroupPerformanceRow,
@@ -26,6 +23,11 @@ function useCopyGroupDetailContext() {
 }
 
 export function CopyGroupsList() {
+  const { data: copyGroupSummaries = [] } = useQuery({
+    queryKey: ['copyGroups', 'summaries'],
+    queryFn: fetchCopyGroupSummaries,
+    staleTime: 60 * 1000,
+  });
   return (
     <div className="copy-groups">
       <header className="copy-groups__header">
@@ -74,9 +76,14 @@ export function CopyGroupsList() {
 
 export function CopyGroupDetailLayout() {
   const { groupId = '' } = useParams();
-  const group = copyGroupSummaries.find((item) => item.id === groupId);
+  const { data: detail, isError } = useQuery({
+    queryKey: ['copyGroups', 'detail', groupId],
+    queryFn: () => fetchCopyGroupDetail(groupId),
+    enabled: Boolean(groupId),
+    staleTime: 60 * 1000,
+  });
 
-  if (!group) {
+  if (!detail || isError) {
     return (
       <div className="copy-groups__empty">
         <h2>Group not found</h2>
@@ -86,11 +93,13 @@ export function CopyGroupDetailLayout() {
     );
   }
 
+  const { group, members, routes, performance } = detail;
+
   const contextValue: CopyGroupDetailContext = {
     group,
-    members: copyGroupMembers[group.id] ?? [],
-    routes: copyGroupRoutes[group.id] ?? [],
-    performance: copyGroupPerformance[group.id] ?? [],
+    members,
+    routes,
+    performance,
   };
 
   const search = `?environment=${group.environment.toLowerCase()}`;

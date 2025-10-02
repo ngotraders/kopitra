@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from '@storybook/test';
 import App from './App';
+import { withQueryClient } from './test/withQueryClient';
 
 const meta: Meta<typeof App> = {
   component: App,
@@ -8,6 +9,7 @@ const meta: Meta<typeof App> = {
   args: {
     onSignOut: fn(),
   },
+  decorators: [withQueryClient],
 };
 
 export default meta;

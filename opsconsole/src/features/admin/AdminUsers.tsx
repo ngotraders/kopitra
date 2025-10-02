@@ -1,5 +1,7 @@
 import { formatDistanceToNow } from 'date-fns';
-import { userActivity, users } from '../../data/console.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAdminUserDetail } from '../../api/fetchAdminUserDetail.ts';
+import { fetchAdminUsers } from '../../api/fetchAdminUsers.ts';
 import type { UserActivityEvent, UserRecord } from '../../types/console.ts';
 import { Link, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import './AdminUsers.css';
@@ -14,6 +16,11 @@ function useAdminUserContext() {
 }
 
 export function AdminUsersList() {
+  const { data: users = [] } = useQuery({
+    queryKey: ['admin', 'users'],
+    queryFn: fetchAdminUsers,
+    staleTime: 60 * 1000,
+  });
   return (
     <div className="admin-users">
       <header className="admin-users__header">
@@ -50,9 +57,14 @@ export function AdminUsersList() {
 
 export function AdminUserDetailLayout() {
   const { userId = '' } = useParams();
-  const user = users.find((item) => item.id === userId);
+  const { data: detail, isError } = useQuery({
+    queryKey: ['admin', 'user', userId],
+    queryFn: () => fetchAdminUserDetail(userId),
+    enabled: Boolean(userId),
+    staleTime: 60 * 1000,
+  });
 
-  if (!user) {
+  if (!detail || isError) {
     return (
       <div className="admin-users__empty">
         <h2>User not found</h2>
@@ -62,9 +74,11 @@ export function AdminUserDetailLayout() {
     );
   }
 
+  const { user, activity } = detail;
+
   const contextValue: AdminUserContext = {
     user,
-    activity: userActivity[user.id] ?? [],
+    activity,
   };
 
   const tabs = [

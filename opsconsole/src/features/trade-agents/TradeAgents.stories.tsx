@@ -11,10 +11,12 @@ import {
   TradeAgentSessions,
   TradeAgentsCatalogue,
 } from './TradeAgents';
+import { withQueryClient } from '../../test/withQueryClient';
 
 const meta: Meta<typeof TradeAgentsCatalogue> = {
   component: TradeAgentsCatalogue,
   title: 'TradeAgents/Catalogue',
+  decorators: [withQueryClient],
 };
 
 export default meta;

@@ -6,10 +6,12 @@ import {
   OperationsOverview,
   OperationsPerformance,
 } from './OperationsViews';
+import { withQueryClient } from '../../test/withQueryClient';
 
 const overviewMeta: Meta<typeof OperationsOverview> = {
   component: OperationsOverview,
   title: 'Operations/Overview',
+  decorators: [withQueryClient],
 };
 
 export default overviewMeta;

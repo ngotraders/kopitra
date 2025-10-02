@@ -1,14 +1,18 @@
 import { format } from 'date-fns';
-import {
-  commandEvents,
-  commandPresets,
-  copyGroupSummaries,
-  operationsHealth,
-  operationsPerformanceTrends,
-} from '../../data/console.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchOperationsCommandEvents } from '../../api/fetchOperationsCommandEvents.ts';
+import { fetchOperationsCommandPresets } from '../../api/fetchOperationsCommandPresets.ts';
+import { fetchCopyGroupSummaries } from '../../api/fetchCopyGroupSummaries.ts';
+import { fetchOperationsHealth } from '../../api/fetchOperationsHealth.ts';
+import { fetchOperationsPerformanceTrends } from '../../api/fetchOperationsPerformanceTrends.ts';
 import './OperationsViews.css';
 
 export function OperationsOverview() {
+  const { data: operationsHealth = [] } = useQuery({
+    queryKey: ['operations', 'health'],
+    queryFn: fetchOperationsHealth,
+    staleTime: 30 * 1000,
+  });
   return (
     <div className="operations">
       <section className="operations__grid" aria-label="Health indicators">
@@ -27,6 +31,16 @@ export function OperationsOverview() {
 }
 
 export function OperationsCommands() {
+  const { data: commandPresets = [] } = useQuery({
+    queryKey: ['operations', 'commandPresets'],
+    queryFn: fetchOperationsCommandPresets,
+    staleTime: 30 * 1000,
+  });
+  const { data: commandEvents = [] } = useQuery({
+    queryKey: ['operations', 'commandEvents'],
+    queryFn: fetchOperationsCommandEvents,
+    staleTime: 15 * 1000,
+  });
   return (
     <div className="operations">
       <section aria-label="Command presets" className="operations__grid">
@@ -79,6 +93,11 @@ export function OperationsCommands() {
 }
 
 export function OperationsHistory() {
+  const { data: commandEvents = [] } = useQuery({
+    queryKey: ['operations', 'commandEvents'],
+    queryFn: fetchOperationsCommandEvents,
+    staleTime: 15 * 1000,
+  });
   return (
     <div className="operations">
       <section aria-label="Command history" className="operations__table">
@@ -118,6 +137,16 @@ export function OperationsHistory() {
 }
 
 export function OperationsPerformance() {
+  const { data: performanceTrends = [] } = useQuery({
+    queryKey: ['operations', 'performanceTrends'],
+    queryFn: fetchOperationsPerformanceTrends,
+    staleTime: 60 * 1000,
+  });
+  const { data: copyGroupSummaries = [] } = useQuery({
+    queryKey: ['copyGroups', 'summaries'],
+    queryFn: fetchCopyGroupSummaries,
+    staleTime: 60 * 1000,
+  });
   return (
     <div className="operations">
       <section className="operations__table" aria-label="Performance summary">
@@ -135,7 +164,7 @@ export function OperationsPerformance() {
             </tr>
           </thead>
           <tbody>
-            {operationsPerformanceTrends.map((trend) => (
+            {performanceTrends.map((trend) => (
               <tr key={trend.id}>
                 <th scope="row">{trend.label}</th>
                 <td>{trend.current}</td>

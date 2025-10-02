@@ -108,6 +108,13 @@ export interface CopyGroupPerformanceRow {
   latencyMs: number;
 }
 
+export interface CopyGroupDetail {
+  group: CopyGroupSummary;
+  members: CopyGroupMember[];
+  routes: CopyGroupRoute[];
+  performance: CopyGroupPerformanceRow[];
+}
+
 export interface TradeAgentSummary {
   id: string;
   name: string;
@@ -143,6 +150,18 @@ export interface TradeAgentCommand {
   status: 'pending' | 'executed' | 'failed';
 }
 
+export interface TradeAgentDetail {
+  agent: TradeAgentSummary;
+  sessions: TradeAgentSession[];
+  commands: TradeAgentCommand[];
+}
+
+export interface TradeAgentSessionDetail {
+  agent: TradeAgentSummary;
+  session: TradeAgentSession;
+  logs: TradeAgentLogEntry[];
+}
+
 export interface UserRecord {
   id: string;
   name: string;
@@ -157,4 +176,9 @@ export interface UserActivityEvent {
   timestamp: string;
   action: string;
   ip: string;
+}
+
+export interface AdminUserDetail {
+  user: UserRecord;
+  activity: UserActivityEvent[];
 }
