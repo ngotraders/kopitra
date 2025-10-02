@@ -16,6 +16,7 @@ import type {
   TradeAgentSummary,
   UserActivityEvent,
   UserRecord,
+  ConsoleUser,
 } from '../types/console.ts';
 
 export const navigationItems: NavigationItem[] = [
@@ -25,6 +26,13 @@ export const navigationItems: NavigationItem[] = [
   { id: 'trade-agents', label: 'Trade Agents', to: '/trade-agents' },
   { id: 'admin', label: 'Admin', to: '/admin/users' },
 ];
+
+export const currentUser: ConsoleUser = {
+  id: 'user-1',
+  name: 'Alex Morgan',
+  email: 'alex.morgan@example.com',
+  roles: ['operator'],
+};
 
 export const statMetrics: StatMetric[] = [
   {

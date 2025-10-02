@@ -164,13 +164,13 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 
 - [ ] Scaffold React Router v6 layout with persistent sidebar, header, and outlet for content panes.
 - [ ] Implement redirects for `/` → `/dashboard/activity` and `/dashboard` → `/dashboard/activity`, plus `/operations` → `/operations/overview`.
-- [ ] Establish role-based route guards that funnel unauthorized users to `/operations/overview` with a toast notification.
+- [x] Establish role-based route guards that funnel unauthorized users to `/operations/overview` with a toast notification.
 
 ### Dashboard
 
 - [ ] Build the dashboard activity view with blended activity feed, incident spotlight cards, and quick-action links.
 - [ ] Implement the dashboard statistics view with KPI tiles, conversion funnel charts, and trend sparklines.
-- [ ] Define shared timeframe/environment filter state so dashboard tabs stay synchronized.
+- [x] Define shared timeframe/environment filter state so dashboard tabs stay synchronized.
 
 ### Operations Workflows
 

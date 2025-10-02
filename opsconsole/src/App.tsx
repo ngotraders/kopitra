@@ -34,6 +34,8 @@ import {
   AdminUsersList,
 } from './features/admin/AdminUsers.tsx';
 import { NotFound } from './features/not-found/NotFound.tsx';
+import { AuthProvider } from './contexts';
+import { RequireRoles } from './routes/RequireRoles.tsx';
 
 export interface AppProps {
   onSignOut?: () => void;
@@ -41,61 +43,65 @@ export interface AppProps {
 
 function App({ onSignOut }: AppProps) {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<AppLayout onSignOut={onSignOut} />}>
-          <Route index element={<Navigate to="/dashboard/activity" replace />} />
-          <Route path="dashboard">
-            <Route index element={<Navigate to="activity" replace />} />
-            <Route path="activity" element={<DashboardActivity />} />
-            <Route path="statistics" element={<DashboardStatistics />} />
-          </Route>
-          <Route path="operations">
-            <Route index element={<Navigate to="overview" replace />} />
-            <Route path="overview" element={<OperationsOverview />} />
-            <Route path="commands" element={<OperationsCommands />} />
-            <Route path="history" element={<OperationsHistory />} />
-            <Route path="performance" element={<OperationsPerformance />} />
-          </Route>
-          <Route path="copy-groups">
-            <Route index element={<CopyGroupsList />} />
-            <Route path=":groupId" element={<CopyGroupDetailLayout />}>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<AppLayout onSignOut={onSignOut} />}>
+            <Route index element={<Navigate to="/dashboard/activity" replace />} />
+            <Route path="dashboard">
+              <Route index element={<Navigate to="activity" replace />} />
+              <Route path="activity" element={<DashboardActivity />} />
+              <Route path="statistics" element={<DashboardStatistics />} />
+            </Route>
+            <Route path="operations">
               <Route index element={<Navigate to="overview" replace />} />
-              <Route path="overview" element={<CopyGroupOverview />} />
-              <Route path="membership" element={<CopyGroupMembership />} />
-              <Route path="routing" element={<CopyGroupRouting />} />
-              <Route path="performance" element={<CopyGroupPerformance />} />
+              <Route path="overview" element={<OperationsOverview />} />
+              <Route path="commands" element={<OperationsCommands />} />
+              <Route path="history" element={<OperationsHistory />} />
+              <Route path="performance" element={<OperationsPerformance />} />
             </Route>
-          </Route>
-          <Route path="trade-agents">
-            <Route index element={<TradeAgentsCatalogue />} />
-            <Route path=":agentId" element={<TradeAgentDetailLayout />}>
-              <Route index element={<Navigate to="overview" replace />} />
-              <Route path="overview" element={<TradeAgentOverview />} />
-              <Route path="sessions" element={<TradeAgentSessions />} />
-              <Route path="commands" element={<TradeAgentCommands />} />
-            </Route>
-            <Route path=":agentId/sessions/:sessionId" element={<TradeAgentSessionLayout />}>
-              <Route index element={<Navigate to="details" replace />} />
-              <Route path="details" element={<TradeAgentSessionDetails />} />
-              <Route path="logs" element={<TradeAgentSessionLogs />} />
-            </Route>
-          </Route>
-          <Route path="admin">
-            <Route path="users">
-              <Route index element={<AdminUsersList />} />
-              <Route path=":userId" element={<AdminUserDetailLayout />}>
+            <Route path="copy-groups">
+              <Route index element={<CopyGroupsList />} />
+              <Route path=":groupId" element={<CopyGroupDetailLayout />}>
                 <Route index element={<Navigate to="overview" replace />} />
-                <Route path="overview" element={<AdminUserOverview />} />
-                <Route path="permissions" element={<AdminUserPermissions />} />
-                <Route path="activity" element={<AdminUserActivity />} />
+                <Route path="overview" element={<CopyGroupOverview />} />
+                <Route path="membership" element={<CopyGroupMembership />} />
+                <Route path="routing" element={<CopyGroupRouting />} />
+                <Route path="performance" element={<CopyGroupPerformance />} />
               </Route>
             </Route>
+            <Route path="trade-agents">
+              <Route index element={<TradeAgentsCatalogue />} />
+              <Route path=":agentId" element={<TradeAgentDetailLayout />}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<TradeAgentOverview />} />
+                <Route path="sessions" element={<TradeAgentSessions />} />
+                <Route path="commands" element={<TradeAgentCommands />} />
+              </Route>
+              <Route path=":agentId/sessions/:sessionId" element={<TradeAgentSessionLayout />}>
+                <Route index element={<Navigate to="details" replace />} />
+                <Route path="details" element={<TradeAgentSessionDetails />} />
+                <Route path="logs" element={<TradeAgentSessionLogs />} />
+              </Route>
+            </Route>
+            <Route element={<RequireRoles roles={['admin']} />}>
+              <Route path="admin">
+                <Route path="users">
+                  <Route index element={<AdminUsersList />} />
+                  <Route path=":userId" element={<AdminUserDetailLayout />}>
+                    <Route index element={<Navigate to="overview" replace />} />
+                    <Route path="overview" element={<AdminUserOverview />} />
+                    <Route path="permissions" element={<AdminUserPermissions />} />
+                    <Route path="activity" element={<AdminUserActivity />} />
+                  </Route>
+                </Route>
+              </Route>
+            </Route>
+            <Route path="*" element={<NotFound />} />
           </Route>
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

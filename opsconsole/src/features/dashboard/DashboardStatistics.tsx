@@ -1,10 +1,38 @@
 import { dashboardTrends, statMetrics } from '../../data/console.ts';
 import { StatCard } from '../../components/StatCard/StatCard.tsx';
+import { useDashboardFilters } from '../../hooks/useDashboardFilters.ts';
+import type { DashboardEnvironmentFilter, DashboardTimeframe } from '../../types/console.ts';
+import { DashboardFilterBar } from './DashboardFilterBar.tsx';
+import './Dashboard.css';
 import './DashboardStatistics.css';
 
+const TIMEFRAME_SUMMARY: Record<DashboardTimeframe, string> = {
+  '24h': 'last 24 hours',
+  '7d': 'last 7 days',
+  '30d': 'last 30 days',
+};
+
+const ENVIRONMENT_SUMMARY: Record<DashboardEnvironmentFilter, string> = {
+  production: 'production',
+  sandbox: 'sandbox',
+  all: 'all environments',
+};
+
 export function DashboardStatistics() {
+  const { timeframe, environment, setTimeframe, setEnvironment } = useDashboardFilters();
+
   return (
     <div className="dashboard-statistics">
+      <DashboardFilterBar
+        timeframe={timeframe}
+        environment={environment}
+        onTimeframeChange={setTimeframe}
+        onEnvironmentChange={setEnvironment}
+      />
+      <p className="dashboard__summary">
+        Viewing {ENVIRONMENT_SUMMARY[environment]} metrics over the {TIMEFRAME_SUMMARY[timeframe]}{' '}
+        window.
+      </p>
       <section className="dashboard-statistics__metrics" aria-label="Key performance metrics">
         {statMetrics.map((metric) => (
           <StatCard key={metric.id} {...metric} />

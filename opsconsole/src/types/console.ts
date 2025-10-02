@@ -26,6 +26,18 @@ export interface NavigationItem {
 
 export type Environment = 'Production' | 'Sandbox';
 
+export type ConsoleRole = 'operator' | 'admin' | 'analyst';
+
+export interface ConsoleUser {
+  id: string;
+  name: string;
+  email: string;
+  roles: ConsoleRole[];
+}
+
+export type DashboardTimeframe = '24h' | '7d' | '30d';
+export type DashboardEnvironmentFilter = 'production' | 'sandbox' | 'all';
+
 export interface PerformanceTrend {
   id: string;
   label: string;
