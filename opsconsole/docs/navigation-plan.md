@@ -25,13 +25,13 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 │         ├── membership
 │         ├── routing
 │         └── performance
-├── /eas
-│   ├── /eas (EA catalogue)
-│   ├── /eas/:eaId
+├── /trade-agents
+│   ├── /trade-agents (trade agent catalogue)
+│   ├── /trade-agents/:agentId
 │   │    ├── overview
 │   │    ├── sessions
 │   │    └── commands
-│   └── /eas/:eaId/sessions/:sessionId
+│   └── /trade-agents/:agentId/sessions/:sessionId
 │         ├── details
 │         └── logs
 └── /admin
@@ -58,11 +58,11 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 | Admin › Users | `/admin/users/:userId` | Summary card of the selected user, defaulting to the `overview` tab.
 | Admin › Users | `/admin/users/:userId/permissions` | Manage roles, copy group membership, and EA entitlements.
 | Admin › Users | `/admin/users/:userId/activity` | Show recent actions, login events, and queued commands.
-| EAs | `/eas` | Global EA catalogue with status, owner, and active session counts. |
-| EAs | `/eas/:eaId` | EA detail landing, surfacing health status, current release, and assigned copy groups. |
-| EAs | `/eas/:eaId/sessions` | Drilldown to live and historical sessions for the EA. |
-| EAs | `/eas/:eaId/sessions/:sessionId` | Session detail (broker account, lifecycle events, heartbeat). |
-| EAs | `/eas/:eaId/commands` | Command queue specific to an EA (start, stop, reload config). |
+| Trade Agents | `/trade-agents` | Global trade agent catalogue with status, owner, and active session counts. |
+| Trade Agents | `/trade-agents/:agentId` | Trade agent detail landing, surfacing health status, current release, and assigned copy groups. |
+| Trade Agents | `/trade-agents/:agentId/sessions` | Drilldown to live and historical sessions for the trade agent. |
+| Trade Agents | `/trade-agents/:agentId/sessions/:sessionId` | Session detail (broker account, lifecycle events, heartbeat). |
+| Trade Agents | `/trade-agents/:agentId/commands` | Command queue specific to a trade agent (start, stop, reload config). |
 | Copy Groups | `/copy-groups` | List of groups with membership counts and routing status. |
 | Copy Groups | `drawer:/copy-groups/new` | Wizard to define routing rules and membership, launched from "Create" button not sidebar. |
 | Copy Groups | `/copy-groups/:groupId` | Group overview, assigned EAs, and environment. |
@@ -80,7 +80,7 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 
 1. **Landing** – `/operations/overview` surfaces real-time health and serves as the default redirect for signed-in operators.
 2. **On-call interventions** – `/operations/commands` exposes presets and bulk actions with audit trails; `/operations/history` validates outcomes.
-3. **EA session workflows** – from `/eas`, operators can open an EA detail page and dive into session-specific URLs for heartbeat checks and log inspection.
+3. **Trade agent session workflows** – from `/trade-agents`, operators can open a trade agent detail page and dive into session-specific URLs for heartbeat checks and log inspection.
 4. **Copy group tuning** – `/copy-groups` surfaces groups; selecting one transitions to `/copy-groups/:groupId` while preserving filters via query params (e.g., `?environment=sandbox`). The `performance` tab highlights notification counts, execution conversions, and EA profit against timeframe and instrument filters.
 5. **Performance analytics** – `/operations/performance` rolls up copy trade KPIs across groups. Query params such as `?range=7d&group=asia-ltf` scope the aggregates without breaking navigation state.
 6. **Administrative upkeep** – `/admin/users` gives tenant admins a dedicated but secondary area. User creation launches a drawer (`drawer:/admin/users/new`) to avoid occupying primary navigation.
@@ -119,16 +119,16 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 - **Routing tab**: Visual matrix showing broker destinations and weight allocations with inline edit controls.
 - **Performance tab**: Sparkline trend of notifications vs. fills, cumulative and per-EA P&L, breakdown of latency buckets, and table of member EAs ordered by profitability.
 
-### EA Catalogue (`/eas`)
+### Trade Agent Catalogue (`/trade-agents`)
 
-- **Primary use case**: Monitoring EA fleet status outside of incident mode.
+- **Primary use case**: Monitoring trade agent fleet status outside of incident mode.
 - **Layout**: Searchable list with columns for release version, copy group assignments, current broker session, and SLA indicators. Row selection opens a side panel with quick stats and "Issue command" shortcut.
 
-### EA Detail (`/eas/:eaId`)
+### Trade Agent Detail (`/trade-agents/:agentId`)
 
 - **Overview tab**: Status banner, recent command executions, configuration summary (risk settings, broker account), and last heartbeat timestamp.
-- **Sessions tab**: Timeline of active and historical sessions with filters for account or environment. Each session row links to `/eas/:eaId/sessions/:sessionId` where detailed logs, broker ticket feeds, and performance snapshots are available.
-- **Commands tab**: Scoped command queue and execution history for the EA, mirroring the operations command schema but filtered to the selected EA.
+- **Sessions tab**: Timeline of active and historical sessions with filters for account or environment. Each session row links to `/trade-agents/:agentId/sessions/:sessionId` where detailed logs, broker ticket feeds, and performance snapshots are available.
+- **Commands tab**: Scoped command queue and execution history for the trade agent, mirroring the operations command schema but filtered to the selected agent.
 
 ### Admin Users (`/admin/users`)
 
