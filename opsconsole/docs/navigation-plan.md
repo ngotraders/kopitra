@@ -158,6 +158,48 @@ The console prioritizes day-to-day operations while keeping low-frequency admini
 - **User creation**: Triggered from a "Invite user" button within the list toolbar. Opens a right-side drawer that walks through email, role, copy group access, and EA entitlements without navigating away from the list.
 - **Detail tabs**: Overview (profile, last login, MFA status), Permissions (role matrix, copy group assignments), Activity (audit log with filters and export).
 
+## Implementation TODO
+
+### Routing & Shell
+
+- [ ] Scaffold React Router v6 layout with persistent sidebar, header, and outlet for content panes.
+- [ ] Implement redirects for `/` → `/dashboard/activity` and `/dashboard` → `/dashboard/activity`, plus `/operations` → `/operations/overview`.
+- [ ] Establish role-based route guards that funnel unauthorized users to `/operations/overview` with a toast notification.
+
+### Dashboard
+
+- [ ] Build the dashboard activity view with blended activity feed, incident spotlight cards, and quick-action links.
+- [ ] Implement the dashboard statistics view with KPI tiles, conversion funnel charts, and trend sparklines.
+- [ ] Define shared timeframe/environment filter state so dashboard tabs stay synchronized.
+
+### Operations Workflows
+
+- [ ] Create the operations overview layout covering fleet status, incidents, and copy trade funnel widgets.
+- [ ] Implement the commands workspace with preset rail, composer, and live result stream.
+- [ ] Build the operations performance dashboard aggregating notification, fill, latency, and P&L metrics.
+
+### Copy Group Management
+
+- [ ] Ship copy group list and detail tabs (overview, membership, routing, performance) with contextual drawers for create/duplicate actions.
+- [ ] Implement performance analytics that align notification counts, fill conversions, and per-EA profitability per group.
+
+### Trade Agent Catalogue
+
+- [ ] Deliver trade agent list view with status indicators, search, and quick command shortcuts.
+- [ ] Build trade agent detail tabs (overview, sessions, commands) and session drilldowns for logs + telemetry.
+
+### Administration
+
+- [ ] Implement admin user list, detail tabs, and invite drawer while keeping entry points lightweight within `/admin`.
+
+### Data & Telemetry Integration
+
+- [ ] Define API contracts for notification fan-out counts, fill conversions, and P&L aggregates used across dashboard and performance views.
+- [ ] Instrument views with telemetry (page views, command issuance, incident acknowledgements) to feed the dashboard activity stream.
+- [ ] Wire toast, audit logging, and distributed tracing metadata for operational commands and administrative actions.
+
+> **In progress**: Drafting API contract outlines for copy trade performance metrics shared between dashboard, operations, and copy group views.
+
 ### Cross-cutting UI Patterns
 
 - **Global search**: Command palette (⌘K) to jump to EAs, copy groups, or users without relying on sidebar navigation.
