@@ -71,6 +71,40 @@ export interface HealthKpi {
   helper: string;
 }
 
+export type IncidentSeverity = 'critical' | 'major' | 'minor';
+
+export interface OperationsIncident {
+  id: string;
+  title: string;
+  severity: IncidentSeverity;
+  openedAt: string;
+  acknowledgedAt?: string;
+  owner: string;
+  status: 'open' | 'acknowledged' | 'resolved';
+  summary: string;
+}
+
+export interface CopyTradeFunnelStage {
+  id: string;
+  label: string;
+  notifications: number;
+  acknowledgements: number;
+  fills: number;
+  pnl: number;
+}
+
+export interface CopyTradePerformanceAggregate {
+  id: string;
+  timeframe: DashboardTimeframe;
+  environment: Environment;
+  notifications: number;
+  tradeAgentsReached: number;
+  fills: number;
+  pnl: number;
+  fillRate: number;
+  avgPnlPerAgent: number;
+}
+
 export interface CopyGroupSummary {
   id: string;
   name: string;

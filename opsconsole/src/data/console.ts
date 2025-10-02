@@ -2,12 +2,16 @@ import type {
   Activity,
   CommandEvent,
   CommandPreset,
+  ConsoleUser,
   CopyGroupMember,
   CopyGroupPerformanceRow,
   CopyGroupRoute,
   CopyGroupSummary,
+  CopyTradeFunnelStage,
+  CopyTradePerformanceAggregate,
   HealthKpi,
   NavigationItem,
+  OperationsIncident,
   PerformanceTrend,
   StatMetric,
   TradeAgentCommand,
@@ -16,7 +20,6 @@ import type {
   TradeAgentSummary,
   UserActivityEvent,
   UserRecord,
-  ConsoleUser,
 } from '../types/console.ts';
 
 export const navigationItems: NavigationItem[] = [
@@ -160,6 +163,106 @@ export const operationsHealth: HealthKpi[] = [
     value: '1',
     status: 'attention',
     helper: 'Copy group APAC Momentum is under review for latency deviation.',
+  },
+];
+
+export const operationsIncidents: OperationsIncident[] = [
+  {
+    id: 'incident-1',
+    title: 'Latency spike on BrokerPrime',
+    severity: 'major',
+    openedAt: '2024-04-22T07:41:00Z',
+    acknowledgedAt: '2024-04-22T07:47:00Z',
+    owner: 'Alex Morgan',
+    status: 'acknowledged',
+    summary:
+      'Median replication latency exceeded the 3s SLA for APAC Momentum accounts after broker maintenance.',
+  },
+  {
+    id: 'incident-2',
+    title: 'Command queue backlog',
+    severity: 'minor',
+    openedAt: '2024-04-22T06:58:00Z',
+    owner: 'Automation Engine',
+    status: 'open',
+    summary:
+      'A burst of credential rotation requests is waiting for manual approval. No replication impact observed.',
+  },
+  {
+    id: 'incident-3',
+    title: 'Sandbox EA heartbeat missed',
+    severity: 'minor',
+    openedAt: '2024-04-22T05:12:00Z',
+    acknowledgedAt: '2024-04-22T05:30:00Z',
+    owner: 'Jordan Mills',
+    status: 'resolved',
+    summary: 'Sandbox Alpha EA-310 stopped publishing heartbeats during overnight test run.',
+  },
+];
+
+export const copyTradeFunnelStages: CopyTradeFunnelStage[] = [
+  {
+    id: 'production',
+    label: 'Production',
+    notifications: 18200,
+    acknowledgements: 17640,
+    fills: 16980,
+    pnl: 482000,
+  },
+  {
+    id: 'sandbox',
+    label: 'Sandbox',
+    notifications: 2100,
+    acknowledgements: 2056,
+    fills: 1988,
+    pnl: 11800,
+  },
+];
+
+export const copyTradePerformanceAggregates: CopyTradePerformanceAggregate[] = [
+  {
+    id: 'production-24h',
+    timeframe: '24h',
+    environment: 'Production',
+    notifications: 18200,
+    tradeAgentsReached: 134,
+    fills: 16980,
+    pnl: 482000,
+    fillRate: 0.933,
+    avgPnlPerAgent: 3597,
+  },
+  {
+    id: 'production-7d',
+    timeframe: '7d',
+    environment: 'Production',
+    notifications: 118400,
+    tradeAgentsReached: 138,
+    fills: 110560,
+    pnl: 1258000,
+    fillRate: 0.934,
+    avgPnlPerAgent: 9116,
+  },
+  {
+    id: 'sandbox-24h',
+    timeframe: '24h',
+    environment: 'Sandbox',
+    notifications: 2100,
+    tradeAgentsReached: 22,
+    fills: 1988,
+    pnl: 11800,
+    fillRate: 0.947,
+    avgPnlPerAgent: 536,
+  },
+  {
+    id: 'sandbox-7d',
+    timeframe: '7d',
+    environment: 'Sandbox',
+    notifications: 12100,
+    tradeAgentsReached: 24,
+    fills: 11342,
+    pnl: 71400,
+    fillRate: 0.937,
+    avgPnlPerAgent: 2975,
   },
 ];
 

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, within } from '@storybook/test';
+import { expect, userEvent, waitFor, within } from '@storybook/test';
 import {
   OperationsCommands,
   OperationsHistory,
@@ -29,7 +29,13 @@ export const Commands: StoryObj<typeof overviewMeta> = {
   render: () => <OperationsCommands />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    expect(canvas.getByText(/command queue/i)).toBeVisible();
+    const commandInput = canvas.getByLabelText(/command/i);
+    await userEvent.clear(commandInput);
+    await userEvent.type(commandInput, 'Restart agent');
+    const submitButton = canvas.getByRole('button', { name: /send command/i });
+    await userEvent.click(submitButton);
+    await canvas.findByText(/Command sent to/i);
+    await waitFor(() => expect(canvas.getAllByText(/Restart agent/i).length).toBeGreaterThan(0));
   },
 };
 
