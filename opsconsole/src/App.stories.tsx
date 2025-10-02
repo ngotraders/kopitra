@@ -6,7 +6,6 @@ const meta: Meta<typeof App> = {
   component: App,
   title: 'Pages/App',
   args: {
-    initialNavId: 'overview',
     onSignOut: fn(),
   },
 };
@@ -17,8 +16,9 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /accounts/i }));
-    expect(canvas.getByRole('button', { name: /accounts/i })).toHaveClass('sidebar__item--active');
+    const operationsLink = canvas.getByRole('link', { name: /operations/i });
+    await userEvent.click(operationsLink);
+    expect(operationsLink).toHaveAttribute('aria-current', 'page');
   },
 };
 

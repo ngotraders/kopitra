@@ -1,4 +1,4 @@
-import { activities, statMetrics } from '../../data/dashboard.ts';
+import { activities, statMetrics } from '../../data/console.ts';
 import { useActivitiesFilter } from '../../hooks/useActivitiesFilter.ts';
 import type { ActivityFilter } from '../../hooks/useActivitiesFilter.ts';
 import { ActivityTable } from '../../components/ActivityTable/ActivityTable.tsx';
@@ -12,7 +12,7 @@ const FILTER_LABELS: Record<ActivityFilter, string> = {
   error: 'Errors',
 };
 
-export function Dashboard() {
+export function DashboardActivity() {
   const { filteredActivities, statusFilter, setStatusFilter, statusTotals } =
     useActivitiesFilter(activities);
 
@@ -52,4 +52,4 @@ export function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default DashboardActivity;

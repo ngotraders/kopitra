@@ -1,0 +1,148 @@
+export type ActivityStatus = 'success' | 'warning' | 'error';
+
+export interface Activity {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  status: ActivityStatus;
+  target: string;
+}
+
+export interface StatMetric {
+  id: string;
+  label: string;
+  value: string;
+  delta: number;
+  description: string;
+}
+
+export interface NavigationItem {
+  id: string;
+  label: string;
+  to: string;
+  badge?: string;
+}
+
+export type Environment = 'Production' | 'Sandbox';
+
+export interface PerformanceTrend {
+  id: string;
+  label: string;
+  current: string;
+  previous: string;
+  delta: number;
+}
+
+export interface CommandPreset {
+  id: string;
+  name: string;
+  description: string;
+  targetCount: number;
+  lastRun: string;
+}
+
+export interface CommandEvent {
+  id: string;
+  command: string;
+  scope: string;
+  issuedAt: string;
+  operator: string;
+  status: 'pending' | 'executed' | 'failed';
+}
+
+export interface HealthKpi {
+  id: string;
+  label: string;
+  value: string;
+  status: 'good' | 'degraded' | 'critical' | 'attention';
+  helper: string;
+}
+
+export interface CopyGroupSummary {
+  id: string;
+  name: string;
+  environment: Environment;
+  status: 'healthy' | 'attention' | 'paused';
+  members: number;
+  tradeAgents: number;
+  notifications24h: number;
+  fills24h: number;
+  pnl24h: number;
+}
+
+export interface CopyGroupMember {
+  id: string;
+  name: string;
+  role: 'Trader' | 'Trade Agent';
+  status: 'active' | 'inactive';
+  pnl7d: number;
+}
+
+export interface CopyGroupRoute {
+  id: string;
+  destination: string;
+  weight: number;
+  status: 'healthy' | 'degraded';
+}
+
+export interface CopyGroupPerformanceRow {
+  agentId: string;
+  agentName: string;
+  notifications: number;
+  fills: number;
+  pnl: number;
+  winRate: number;
+  latencyMs: number;
+}
+
+export interface TradeAgentSummary {
+  id: string;
+  name: string;
+  status: 'online' | 'degraded' | 'offline';
+  environment: Environment;
+  release: string;
+  activeSessions: number;
+  copyGroupCount: number;
+}
+
+export interface TradeAgentSession {
+  id: string;
+  brokerAccount: string;
+  environment: Environment;
+  status: 'active' | 'pending' | 'closed';
+  startedAt: string;
+  lastHeartbeat: string;
+  latencyMs: number;
+}
+
+export interface TradeAgentLogEntry {
+  id: string;
+  timestamp: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface TradeAgentCommand {
+  id: string;
+  issuedAt: string;
+  operator: string;
+  command: string;
+  status: 'pending' | 'executed' | 'failed';
+}
+
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Operator' | 'Admin' | 'Analyst';
+  lastActive: string;
+  status: 'active' | 'pending' | 'disabled';
+}
+
+export interface UserActivityEvent {
+  id: string;
+  timestamp: string;
+  action: string;
+  ip: string;
+}

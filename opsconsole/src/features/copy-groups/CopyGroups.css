@@ -1,0 +1,140 @@
+.copy-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.copy-groups__header h1 {
+  margin: 0;
+}
+
+.copy-groups__header p {
+  color: rgba(15, 23, 42, 0.7);
+}
+
+.copy-groups table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.copy-groups th,
+.copy-groups td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.copy-groups tbody tr:last-of-type th,
+.copy-groups tbody tr:last-of-type td {
+  border-bottom: none;
+}
+
+.copy-groups-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.copy-groups-detail__header {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.copy-groups-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.copy-groups-detail__stats span {
+  display: block;
+  font-size: 0.85rem;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.copy-groups-detail__stats strong {
+  font-size: 1.4rem;
+}
+
+.copy-groups-detail__tabs {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.copy-groups-detail__tab {
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.85);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.copy-groups-detail__tab--active {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: #0f172a;
+}
+
+.copy-groups-detail__panel {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.copy-groups-detail__panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.copy-groups-detail__panel th,
+.copy-groups-detail__panel td {
+  text-align: left;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.copy-groups-detail__panel tbody tr:last-of-type th,
+.copy-groups-detail__panel tbody tr:last-of-type td {
+  border-bottom: none;
+}
+
+.copy-groups-detail__status--healthy {
+  color: #16a34a;
+}
+
+.copy-groups-detail__status--degraded {
+  color: #ca8a04;
+}
+
+.copy-groups-detail__status--attention,
+.copy-groups-detail__status--paused {
+  color: #dc2626;
+}
+
+.copy-groups__empty {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 1rem;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.copy-groups__empty a {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #2563eb;
+}

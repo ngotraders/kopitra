@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, within } from '@storybook/test';
-import { activities } from '../../data/dashboard.ts';
+import { activities } from '../../data/console.ts';
 import { ActivityTable } from './ActivityTable';
 
 const meta: Meta<typeof ActivityTable> = {

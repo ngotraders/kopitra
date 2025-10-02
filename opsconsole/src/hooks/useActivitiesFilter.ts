@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Activity, ActivityStatus } from '../types/dashboard.ts';
+import type { Activity, ActivityStatus } from '../types/console.ts';
 
 export type ActivityFilter = ActivityStatus | 'all';
 
