@@ -15,12 +15,25 @@ import {
   upsertCopyTradeGroupMember,
 } from './copyTradeGroups.ts';
 import { enqueueExpertAdvisorTradeOrder } from './enqueueExpertAdvisorTradeOrder.ts';
-import { gatewayRequest, getIntegrationConfig, managementRequest } from './config.ts';
+import {
+  gatewayRequest,
+  getIntegrationConfig,
+  isIntegrationConfigured,
+  managementRequest,
+} from './config.ts';
 
 const RETRY_ATTEMPTS = 20;
 const RETRY_DELAY_MS = 250;
+const integrationConfigured = isIntegrationConfigured();
+const describeIntegration = integrationConfigured ? describe.sequential : describe.skip;
 
-describe.sequential('Ops console copy trading integration', () => {
+if (!integrationConfigured) {
+  console.warn(
+    'Ops console integration environment is not configured. Skipping copy trading integration scenarios.',
+  );
+}
+
+describeIntegration('Ops console copy trading integration', () => {
   beforeAll(async () => {
     const config = getIntegrationConfig();
     await waitForGateway();
@@ -529,7 +542,10 @@ async function waitForSessionAuthentication(session: ExpertAdvisorSession) {
   throw new Error(`Session for ${session.accountId} did not authenticate in time.`);
 }
 
-function findEvent<T extends { eventType: string }>(events: Iterable<T>, eventType: string): T | undefined {
+function findEvent<T extends { eventType: string }>(
+  events: Iterable<T>,
+  eventType: string,
+): T | undefined {
   for (const event of events) {
     if (event.eventType === eventType) {
       return event;

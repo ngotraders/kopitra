@@ -15,21 +15,25 @@ interface OpsIntegrationGlobals {
   };
 }
 
+type ResolvedIntegrationConfig = Partial<OpsIntegrationConfig>;
+
 let cachedConfig: OpsIntegrationConfig | null = null;
+
+export function isIntegrationConfigured(): boolean {
+  if (cachedConfig) {
+    return true;
+  }
+
+  const resolved = resolveIntegrationConfig();
+  return Boolean(resolved.managementBaseUrl && resolved.gatewayBaseUrl && resolved.bearerToken);
+}
 
 export function getIntegrationConfig(): OpsIntegrationConfig {
   if (cachedConfig) {
     return cachedConfig;
   }
 
-  const globals = globalThis as OpsIntegrationGlobals;
-  const env = globals.process?.env ?? {};
-
-  const managementBaseUrl =
-    globals.__OPS_MANAGEMENT_BASE_URL__ ??
-    env.MANAGEMENT_BASE_URL ??
-    env.OPS_MANAGEMENT_BASE_URL ??
-    env.VITE_MANAGEMENT_BASE_URL;
+  const { managementBaseUrl, gatewayBaseUrl, bearerToken, tenantId } = resolveIntegrationConfig();
 
   if (!managementBaseUrl) {
     throw new Error(
@@ -37,35 +41,21 @@ export function getIntegrationConfig(): OpsIntegrationConfig {
     );
   }
 
-  const gatewayBaseUrl =
-    globals.__OPS_GATEWAY_BASE_URL__ ?? env.GATEWAY_BASE_URL ?? env.OPS_GATEWAY_BASE_URL;
   if (!gatewayBaseUrl) {
     throw new Error(
       'Gateway base URL is not configured. Set OPS_GATEWAY_BASE_URL or GATEWAY_BASE_URL.',
     );
   }
 
-  const bearerToken =
-    globals.__OPS_BEARER_TOKEN__ ??
-    env.OPS_BEARER_TOKEN ??
-    env.MANAGEMENT_BEARER_TOKEN ??
-    env.BEARER_TOKEN;
   if (!bearerToken) {
     throw new Error('OPS_BEARER_TOKEN is not configured.');
   }
-
-  const tenantId =
-    globals.__OPS_TENANT_ID__ ??
-    env.OPS_TENANT_ID ??
-    env.MANAGEMENT_TENANT_ID ??
-    env.TRADE_AGENT_TENANT ??
-    'console';
 
   cachedConfig = {
     managementBaseUrl: stripTrailingSlash(managementBaseUrl),
     gatewayBaseUrl: stripTrailingSlash(gatewayBaseUrl),
     bearerToken,
-    tenantId,
+    tenantId: tenantId ?? 'console',
   };
 
   return cachedConfig;
@@ -142,4 +132,32 @@ export async function expectGatewayOk(response: Response) {
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
+}
+
+function resolveIntegrationConfig(
+  globalsOverride?: OpsIntegrationGlobals,
+): ResolvedIntegrationConfig {
+  const globals = globalsOverride ?? (globalThis as OpsIntegrationGlobals);
+  const env = globals.process?.env ?? {};
+
+  return {
+    managementBaseUrl:
+      globals.__OPS_MANAGEMENT_BASE_URL__ ??
+      env.MANAGEMENT_BASE_URL ??
+      env.OPS_MANAGEMENT_BASE_URL ??
+      env.VITE_MANAGEMENT_BASE_URL,
+    gatewayBaseUrl:
+      globals.__OPS_GATEWAY_BASE_URL__ ?? env.GATEWAY_BASE_URL ?? env.OPS_GATEWAY_BASE_URL,
+    bearerToken:
+      globals.__OPS_BEARER_TOKEN__ ??
+      env.OPS_BEARER_TOKEN ??
+      env.MANAGEMENT_BEARER_TOKEN ??
+      env.BEARER_TOKEN,
+    tenantId:
+      globals.__OPS_TENANT_ID__ ??
+      env.OPS_TENANT_ID ??
+      env.MANAGEMENT_TENANT_ID ??
+      env.TRADE_AGENT_TENANT ??
+      'console',
+  };
 }
