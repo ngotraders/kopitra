@@ -1,37 +1,107 @@
-import { useState } from 'react';
-import Header from './components/Header/Header.tsx';
-import Sidebar from './components/Sidebar/Sidebar.tsx';
-import { Dashboard } from './features/dashboard/Dashboard.tsx';
-import { navigationItems } from './data/dashboard.ts';
-import type { NavigationItem } from './types/dashboard.ts';
-import './App.css';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from './layouts/AppLayout.tsx';
+import { DashboardActivity } from './features/dashboard/DashboardActivity.tsx';
+import { DashboardStatistics } from './features/dashboard/DashboardStatistics.tsx';
+import {
+  OperationsCommands,
+  OperationsHistory,
+  OperationsOverview,
+  OperationsPerformance,
+} from './features/operations/OperationsViews.tsx';
+import {
+  CopyGroupDetailLayout,
+  CopyGroupMembership,
+  CopyGroupOverview,
+  CopyGroupPerformance,
+  CopyGroupRouting,
+  CopyGroupsList,
+} from './features/copy-groups/CopyGroups.tsx';
+import {
+  TradeAgentCommands,
+  TradeAgentDetailLayout,
+  TradeAgentOverview,
+  TradeAgentSessionDetails,
+  TradeAgentSessionLayout,
+  TradeAgentSessionLogs,
+  TradeAgentSessions,
+  TradeAgentsCatalogue,
+} from './features/trade-agents/TradeAgents.tsx';
+import {
+  AdminUserActivity,
+  AdminUserDetailLayout,
+  AdminUserOverview,
+  AdminUserPermissions,
+  AdminUsersList,
+} from './features/admin/AdminUsers.tsx';
+import { NotFound } from './features/not-found/NotFound.tsx';
+import { AuthProvider } from './contexts';
+import { RequireRoles } from './routes/RequireRoles.tsx';
 
 export interface AppProps {
-  initialNavId?: NavigationItem['id'];
   onSignOut?: () => void;
 }
 
-function App({ initialNavId = navigationItems[0].id, onSignOut }: AppProps) {
-  const [activeNav, setActiveNav] = useState(initialNavId);
-
+function App({ onSignOut }: AppProps) {
   return (
-    <div className="app">
-      <Header
-        environment={activeNav === 'overview' ? 'Production' : 'Sandbox'}
-        userName="Alex Morgan"
-        onSignOut={onSignOut ?? (() => console.info('Signing out...'))}
-      />
-      <div className="app__content">
-        <Sidebar
-          items={navigationItems}
-          activeId={activeNav}
-          onSelect={(item) => setActiveNav(item.id)}
-        />
-        <main className="app__main">
-          <Dashboard />
-        </main>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<AppLayout onSignOut={onSignOut} />}>
+            <Route index element={<Navigate to="/dashboard/activity" replace />} />
+            <Route path="dashboard">
+              <Route index element={<Navigate to="activity" replace />} />
+              <Route path="activity" element={<DashboardActivity />} />
+              <Route path="statistics" element={<DashboardStatistics />} />
+            </Route>
+            <Route path="operations">
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<OperationsOverview />} />
+              <Route path="commands" element={<OperationsCommands />} />
+              <Route path="history" element={<OperationsHistory />} />
+              <Route path="performance" element={<OperationsPerformance />} />
+            </Route>
+            <Route path="copy-groups">
+              <Route index element={<CopyGroupsList />} />
+              <Route path=":groupId" element={<CopyGroupDetailLayout />}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<CopyGroupOverview />} />
+                <Route path="membership" element={<CopyGroupMembership />} />
+                <Route path="routing" element={<CopyGroupRouting />} />
+                <Route path="performance" element={<CopyGroupPerformance />} />
+              </Route>
+            </Route>
+            <Route path="trade-agents">
+              <Route index element={<TradeAgentsCatalogue />} />
+              <Route path=":agentId" element={<TradeAgentDetailLayout />}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<TradeAgentOverview />} />
+                <Route path="sessions" element={<TradeAgentSessions />} />
+                <Route path="commands" element={<TradeAgentCommands />} />
+              </Route>
+              <Route path=":agentId/sessions/:sessionId" element={<TradeAgentSessionLayout />}>
+                <Route index element={<Navigate to="details" replace />} />
+                <Route path="details" element={<TradeAgentSessionDetails />} />
+                <Route path="logs" element={<TradeAgentSessionLogs />} />
+              </Route>
+            </Route>
+            <Route element={<RequireRoles roles={['admin']} />}>
+              <Route path="admin">
+                <Route path="users">
+                  <Route index element={<AdminUsersList />} />
+                  <Route path=":userId" element={<AdminUserDetailLayout />}>
+                    <Route index element={<Navigate to="overview" replace />} />
+                    <Route path="overview" element={<AdminUserOverview />} />
+                    <Route path="permissions" element={<AdminUserPermissions />} />
+                    <Route path="activity" element={<AdminUserActivity />} />
+                  </Route>
+                </Route>
+              </Route>
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

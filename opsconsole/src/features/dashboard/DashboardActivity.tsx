@@ -1,8 +1,13 @@
-import { activities, statMetrics } from '../../data/dashboard.ts';
+import { useQuery } from '@tanstack/react-query';
+import { fetchDashboardActivities } from '../../api/fetchDashboardActivities.ts';
+import { fetchDashboardMetrics } from '../../api/fetchDashboardMetrics.ts';
 import { useActivitiesFilter } from '../../hooks/useActivitiesFilter.ts';
 import type { ActivityFilter } from '../../hooks/useActivitiesFilter.ts';
+import { useDashboardFilters } from '../../hooks/useDashboardFilters.ts';
+import type { DashboardEnvironmentFilter, DashboardTimeframe } from '../../types/console.ts';
 import { ActivityTable } from '../../components/ActivityTable/ActivityTable.tsx';
 import { StatCard } from '../../components/StatCard/StatCard.tsx';
+import { DashboardFilterBar } from './DashboardFilterBar.tsx';
 import './Dashboard.css';
 
 const FILTER_LABELS: Record<ActivityFilter, string> = {
@@ -12,14 +17,47 @@ const FILTER_LABELS: Record<ActivityFilter, string> = {
   error: 'Errors',
 };
 
-export function Dashboard() {
+const TIMEFRAME_SUMMARY: Record<DashboardTimeframe, string> = {
+  '24h': 'last 24 hours',
+  '7d': 'last 7 days',
+  '30d': 'last 30 days',
+};
+
+const ENVIRONMENT_SUMMARY: Record<DashboardEnvironmentFilter, string> = {
+  production: 'production',
+  sandbox: 'sandbox',
+  all: 'all environments',
+};
+
+export function DashboardActivity() {
+  const { data: activities = [] } = useQuery({
+    queryKey: ['dashboard', 'activities'],
+    queryFn: fetchDashboardActivities,
+    staleTime: 60 * 1000,
+  });
+  const { data: statMetrics = [] } = useQuery({
+    queryKey: ['dashboard', 'metrics'],
+    queryFn: fetchDashboardMetrics,
+    staleTime: 60 * 1000,
+  });
   const { filteredActivities, statusFilter, setStatusFilter, statusTotals } =
     useActivitiesFilter(activities);
+  const { timeframe, environment, setTimeframe, setEnvironment } = useDashboardFilters();
 
   const filters: ActivityFilter[] = ['all', 'success', 'warning', 'error'];
 
   return (
     <div className="dashboard">
+      <DashboardFilterBar
+        timeframe={timeframe}
+        environment={environment}
+        onTimeframeChange={setTimeframe}
+        onEnvironmentChange={setEnvironment}
+      />
+      <p className="dashboard__summary">
+        Showing {ENVIRONMENT_SUMMARY[environment]} activity for the {TIMEFRAME_SUMMARY[timeframe]}{' '}
+        window.
+      </p>
       <section className="dashboard__stats" aria-label="Key metrics">
         {statMetrics.map((metric) => (
           <StatCard key={metric.id} {...metric} />
@@ -52,4 +90,4 @@ export function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default DashboardActivity;

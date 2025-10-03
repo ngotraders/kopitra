@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import type { Activity } from '../../types/dashboard.ts';
+import type { Activity } from '../../types/console.ts';
 import './ActivityTable.css';
 
 export interface ActivityTableProps {

@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { activities } from '../data/dashboard.ts';
+import { activities } from '../data/console.ts';
 import { useActivitiesFilter } from './useActivitiesFilter.ts';
 
 describe('useActivitiesFilter', () => {

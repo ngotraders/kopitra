@@ -1,4 +1,4 @@
-import type { StatMetric } from '../../types/dashboard.ts';
+import type { StatMetric } from '../../types/console.ts';
 import './StatCard.css';
 
 type StatCardProps = StatMetric;
