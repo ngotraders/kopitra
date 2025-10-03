@@ -28,6 +28,7 @@ export const navigationItems: NavigationItem[] = [
   { id: 'copy-groups', label: 'Copy Groups', to: '/copy-groups' },
   { id: 'trade-agents', label: 'Trade Agents', to: '/trade-agents' },
   { id: 'admin', label: 'Admin', to: '/admin/users' },
+  { id: 'integration', label: 'Integration', to: '/integration/copy-trading' },
 ];
 
 export const currentUser: ConsoleUser = {

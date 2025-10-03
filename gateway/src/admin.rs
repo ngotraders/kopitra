@@ -2,6 +2,7 @@ use std::{env, time::Duration};
 
 use azure_core::{StatusCode, error::Error as AzureError, new_http_client};
 use azure_messaging_servicebus::prelude::QueueClient;
+use reqwest::{Client as HttpClient, StatusCode as HttpStatusCode, Url};
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -20,6 +21,7 @@ const QUEUE_ENV: &str = "EA_SERVICE_BUS_QUEUE";
 const POLICY_ENV: &str = "EA_SERVICE_BUS_POLICY";
 const KEY_ENV: &str = "EA_SERVICE_BUS_KEY";
 const POLL_INTERVAL_ENV: &str = "EA_SERVICE_BUS_POLL_INTERVAL_SECS";
+const EMULATOR_BASE_ENV: &str = "EA_SERVICE_BUS_EMULATOR_BASE_URL";
 
 #[derive(Debug, Error)]
 pub enum ServiceBusConfigError {
@@ -122,13 +124,50 @@ fn read_env(name: &'static str) -> Result<Option<String>, ServiceBusConfigError>
 }
 
 pub struct ServiceBusWorker {
-    client: QueueClient,
-    queue_name: String,
+    backend: ServiceBusBackend,
     poll_interval: Duration,
 }
 
+enum ServiceBusBackend {
+    Azure {
+        client: QueueClient,
+        queue_name: String,
+    },
+    Emulator {
+        client: HttpClient,
+        queue_name: String,
+        dequeue_url: Url,
+    },
+}
+
+#[derive(Debug, Error)]
+pub enum ServiceBusWorkerInitError {
+    #[error(transparent)]
+    Azure(#[from] AzureError),
+    #[error("invalid Service Bus emulator base URL: {0}")]
+    InvalidEmulatorUrl(url::ParseError),
+}
+
 impl ServiceBusWorker {
-    pub fn from_config(config: ServiceBusConfig) -> Result<Self, AzureError> {
+    pub fn from_config(config: ServiceBusConfig) -> Result<Self, ServiceBusWorkerInitError> {
+        if let Ok(base_url) = env::var(EMULATOR_BASE_ENV) {
+            let client = HttpClient::new();
+            let base =
+                Url::parse(&base_url).map_err(ServiceBusWorkerInitError::InvalidEmulatorUrl)?;
+            let dequeue_url = base
+                .join(&format!("queues/{}/dequeue", config.queue))
+                .map_err(ServiceBusWorkerInitError::InvalidEmulatorUrl)?;
+
+            return Ok(Self {
+                backend: ServiceBusBackend::Emulator {
+                    client,
+                    queue_name: config.queue,
+                    dequeue_url,
+                },
+                poll_interval: config.poll_interval,
+            });
+        }
+
         let http_client = new_http_client();
         let queue_name = config.queue.clone();
         let client = QueueClient::new(
@@ -137,124 +176,183 @@ impl ServiceBusWorker {
             queue_name.clone(),
             config.policy_name,
             config.policy_key,
-        )?;
+        )
+        .map_err(ServiceBusWorkerInitError::Azure)?;
 
         Ok(Self {
-            client,
-            queue_name,
+            backend: ServiceBusBackend::Azure { client, queue_name },
             poll_interval: config.poll_interval,
         })
     }
 
     pub fn spawn(self, state: AppState) -> JoinHandle<()> {
-        let ServiceBusWorker {
-            client,
-            queue_name,
-            poll_interval,
-        } = self;
+        match self.backend {
+            ServiceBusBackend::Azure { client, queue_name } => {
+                let poll_interval = self.poll_interval;
+                tokio::spawn(async move {
+                    loop {
+                        match client.peek_lock_message2(Some(poll_interval)).await {
+                            Ok(lock) => {
+                                if lock.status() == &StatusCode::NoContent {
+                                    sleep(poll_interval).await;
+                                    continue;
+                                }
 
-        tokio::spawn(async move {
-            loop {
-                match client.peek_lock_message2(Some(poll_interval)).await {
-                    Ok(lock) => {
-                        if lock.status() == &StatusCode::NoContent {
-                            sleep(poll_interval).await;
-                            continue;
-                        }
+                                let body = lock.body();
+                                if body.trim().is_empty() {
+                                    debug!(queue = %queue_name, "received empty admin message");
+                                    if let Err(error) = lock.delete_message().await {
+                                        warn!(queue = %queue_name, %error, "failed to delete empty admin message");
+                                    }
+                                    continue;
+                                }
 
-                        let body = lock.body();
-                        if body.trim().is_empty() {
-                            debug!(queue = %queue_name, "received empty admin message");
-                            if let Err(error) = lock.delete_message().await {
-                                warn!(queue = %queue_name, %error, "failed to delete empty admin message");
-                            }
-                            continue;
-                        }
+                                match serde_json::from_str::<AdminEnqueueRequest>(&body) {
+                                    Ok(envelope) => {
+                                        let result =
+                                            process_envelope(&state, envelope, &queue_name).await;
 
-                        match serde_json::from_str::<AdminBusEnvelope>(&body) {
-                            Ok(envelope) => {
-                                let result = process_envelope(&state, envelope, &queue_name).await;
-
-                                match result {
-                                    Ok(()) => {
-                                        if let Err(error) = lock.delete_message().await {
-                                            warn!(
-                                                queue = %queue_name,
-                                                %error,
-                                                "failed to delete processed admin message"
-                                            );
+                                        match result {
+                                            Ok(()) => {
+                                                if let Err(error) = lock.delete_message().await {
+                                                    warn!(
+                                                        queue = %queue_name,
+                                                        %error,
+                                                        "failed to delete processed admin message"
+                                                    );
+                                                }
+                                            }
+                                            Err(error) => match &error {
+                                                MessageHandlingError::Admin { account, .. } => {
+                                                    warn!(
+                                                        queue = %queue_name,
+                                                        account = %account,
+                                                        %error,
+                                                        "failed to apply admin command from Service Bus",
+                                                    );
+                                                }
+                                                MessageHandlingError::Api {
+                                                    account,
+                                                    session,
+                                                    source,
+                                                } => {
+                                                    error!(
+                                                        queue = %queue_name,
+                                                        account = %account,
+                                                        session = %session,
+                                                        %source,
+                                                        "failed to deliver admin request from Service Bus",
+                                                    );
+                                                }
+                                            },
                                         }
                                     }
                                     Err(error) => {
-                                        match &error {
-                                            MessageHandlingError::Admin { account, .. } => {
-                                                warn!(
-                                                    queue = %queue_name,
-                                                    account = %account,
-                                                    %error,
-                                                    "failed to apply admin command from Service Bus",
-                                                );
-                                            }
-                                            MessageHandlingError::Api {
-                                                account,
-                                                session,
-                                                source,
-                                            } => {
-                                                warn!(
-                                                    queue = %queue_name,
-                                                    account = %account,
-                                                    session = %session,
-                                                    code = source.code(),
-                                                    status = %source.status(),
-                                                    message = %source.message(),
-                                                    "failed to apply management command from Service Bus",
-                                                );
-                                            }
-                                        }
-
-                                        if let Err(delete_error) = lock.delete_message().await {
-                                            warn!(
-                                                queue = %queue_name,
-                                                %delete_error,
-                                                "failed to delete rejected admin message"
-                                            );
-                                        }
+                                        warn!(
+                                            queue = %queue_name,
+                                            %error,
+                                            "failed to deserialize admin message"
+                                        );
                                     }
                                 }
                             }
                             Err(error) => {
-                                error!(
+                                warn!(
                                     queue = %queue_name,
                                     %error,
-                                    payload = %body,
-                                    "failed to deserialize admin message"
+                                    "failed to receive admin message from Service Bus"
                                 );
-                                if let Err(delete_error) = lock.delete_message().await {
-                                    warn!(
-                                        queue = %queue_name,
-                                        %delete_error,
-                                        "failed to delete invalid admin message"
-                                    );
-                                }
+                                sleep(poll_interval).await;
                             }
                         }
                     }
-                    Err(error) => {
-                        error!(
-                            queue = %queue_name,
-                            %error,
-                            "failed to receive admin message from Service Bus"
-                        );
+                })
+            }
+            ServiceBusBackend::Emulator {
+                client,
+                queue_name,
+                dequeue_url,
+            } => {
+                let poll_interval = self.poll_interval;
+                tokio::spawn(async move {
+                    loop {
+                        match client.post(dequeue_url.clone()).send().await {
+                            Ok(response) => {
+                                if response.status() == HttpStatusCode::NO_CONTENT {
+                                    sleep(poll_interval).await;
+                                    continue;
+                                }
+
+                                if !response.status().is_success() {
+                                    let status = response.status();
+                                    let body = response.text().await.unwrap_or_default();
+                                    warn!(
+                                        queue = %queue_name,
+                                        %status,
+                                        body,
+                                        "failed to dequeue admin message from emulator"
+                                    );
+                                    sleep(poll_interval).await;
+                                    continue;
+                                }
+
+                                match response.json::<AdminEnqueueRequest>().await {
+                                    Ok(envelope) => {
+                                        if let Err(error) =
+                                            process_envelope(&state, envelope, &queue_name).await
+                                        {
+                                            match error {
+                                                MessageHandlingError::Admin { account, source } => {
+                                                    warn!(
+                                                        queue = %queue_name,
+                                                        account = %account,
+                                                        %source,
+                                                        "failed to apply admin command from emulator",
+                                                    );
+                                                }
+                                                MessageHandlingError::Api {
+                                                    account,
+                                                    session,
+                                                    source,
+                                                } => {
+                                                    error!(
+                                                        queue = %queue_name,
+                                                        account = %account,
+                                                        session = %session,
+                                                        %source,
+                                                        "failed to deliver admin request from emulator",
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Err(error) => {
+                                        warn!(
+                                            queue = %queue_name,
+                                            %error,
+                                            "failed to parse admin message from emulator"
+                                        );
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                warn!(
+                                    queue = %queue_name,
+                                    %error,
+                                    "failed to fetch admin message from emulator"
+                                );
+                            }
+                        }
+
                         sleep(poll_interval).await;
                     }
-                }
+                })
             }
-        })
+        }
     }
 }
-
 #[derive(Debug, Error)]
-enum MessageHandlingError {
+pub(crate) enum MessageHandlingError {
     #[error("{source}")]
     Admin {
         account: String,
@@ -282,7 +380,7 @@ async fn handle_command(
                 queue = %queue_name,
                 account = %account,
                 session = %outcome.session_id,
-                "processed Service Bus approval"
+                "processed Service Bus approval",
             );
             Ok(())
         }
@@ -292,7 +390,7 @@ async fn handle_command(
                 account = %account,
                 session = %outcome.session_id,
                 reason = ?outcome.reason,
-                "processed Service Bus rejection"
+                "processed Service Bus rejection",
             );
             Ok(())
         }
@@ -302,7 +400,7 @@ async fn handle_command(
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-enum AdminBusEnvelope {
+pub(crate) enum AdminEnqueueRequest {
     AuthApproval(AuthApprovalMessage),
     AuthReject(AuthRejectMessage),
     QueueOutboxEvent(OutboxEventMessage),
@@ -311,7 +409,7 @@ enum AdminBusEnvelope {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AuthApprovalMessage {
+pub(crate) struct AuthApprovalMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(alias = "authKeyHash")]
@@ -324,7 +422,7 @@ struct AuthApprovalMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AuthRejectMessage {
+pub(crate) struct AuthRejectMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(alias = "authKeyHash")]
@@ -337,7 +435,7 @@ struct AuthRejectMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OutboxEventMessage {
+pub(crate) struct OutboxEventMessage {
     account_id: String,
     session_id: Uuid,
     event_type: String,
@@ -349,7 +447,7 @@ struct OutboxEventMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TradeOrderMessage {
+pub(crate) struct TradeOrderMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(flatten)]
@@ -360,13 +458,20 @@ const fn default_requires_ack_true() -> bool {
     true
 }
 
+pub(crate) async fn apply_envelope(
+    state: &AppState,
+    envelope: AdminEnqueueRequest,
+) -> Result<(), MessageHandlingError> {
+    process_envelope(state, envelope, "http-admin").await
+}
+
 async fn process_envelope(
     state: &AppState,
-    envelope: AdminBusEnvelope,
+    envelope: AdminEnqueueRequest,
     queue_name: &str,
 ) -> Result<(), MessageHandlingError> {
     match envelope {
-        AdminBusEnvelope::AuthApproval(message) => {
+        AdminEnqueueRequest::AuthApproval(message) => {
             let account = message.account_id.clone();
             let session_id = message.session_id;
             let command = AdminCommand::Approve(AdminApprovalCommand {
@@ -381,7 +486,7 @@ async fn process_envelope(
                 .await
                 .map_err(|source| MessageHandlingError::Admin { account, source })
         }
-        AdminBusEnvelope::AuthReject(message) => {
+        AdminEnqueueRequest::AuthReject(message) => {
             let account = message.account_id.clone();
             let session_id = message.session_id;
             let command = AdminCommand::Reject(AdminRejectionCommand {
@@ -396,10 +501,10 @@ async fn process_envelope(
                 .await
                 .map_err(|source| MessageHandlingError::Admin { account, source })
         }
-        AdminBusEnvelope::QueueOutboxEvent(message) => {
+        AdminEnqueueRequest::QueueOutboxEvent(message) => {
             process_outbox_event(state, message, queue_name).await
         }
-        AdminBusEnvelope::TradeOrder(message) => {
+        AdminEnqueueRequest::TradeOrder(message) => {
             process_trade_order(state, message, queue_name).await
         }
     }

@@ -19,7 +19,9 @@ use uuid::Uuid;
 
 mod admin;
 
-pub use admin::{ServiceBusConfig, ServiceBusConfigError, ServiceBusWorker};
+pub use admin::{
+    ServiceBusConfig, ServiceBusConfigError, ServiceBusWorker, ServiceBusWorkerInitError,
+};
 
 /// Builds the application router for the EA counterparty service.
 pub fn router(state: AppState) -> Router {

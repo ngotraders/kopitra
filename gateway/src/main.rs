@@ -25,9 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else {
-        info!(
-            "Service Bus configuration not provided; admin approvals will rely on the HTTP endpoint"
-        );
+        warn!("Service Bus configuration not provided; admin command processing disabled");
     }
 
     let app = router(state);

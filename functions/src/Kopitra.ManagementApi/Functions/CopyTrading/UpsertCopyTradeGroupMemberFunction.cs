@@ -8,6 +8,7 @@ using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain.CopyTrading;
+using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -21,13 +22,16 @@ public sealed class UpsertCopyTradeGroupMemberFunction
 {
     private readonly ICommandDispatcher _commandDispatcher;
     private readonly AdminRequestContextFactory _contextFactory;
+    private readonly CopyTradeGroupBroadcaster _broadcaster;
 
     public UpsertCopyTradeGroupMemberFunction(
         ICommandDispatcher commandDispatcher,
-        AdminRequestContextFactory contextFactory)
+        AdminRequestContextFactory contextFactory,
+        CopyTradeGroupBroadcaster broadcaster)
     {
         _commandDispatcher = commandDispatcher;
         _contextFactory = contextFactory;
+        _broadcaster = broadcaster;
     }
 
     [Function("UpsertCopyTradeGroupMember")]
@@ -77,6 +81,7 @@ public sealed class UpsertCopyTradeGroupMemberFunction
 
             var command = new UpsertCopyTradeGroupMemberCommand(context.TenantId, groupId, memberId, role, riskStrategy, payload.Allocation, payload.RequestedBy);
             var resultModel = await _commandDispatcher.DispatchAsync(command, cancellationToken);
+            await _broadcaster.BroadcastAsync(resultModel, cancellationToken).ConfigureAwait(false);
             return await request.CreateJsonResponseAsync(HttpStatusCode.OK, resultModel, cancellationToken);
         }
         catch (HttpRequestValidationException ex)
