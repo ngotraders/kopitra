@@ -4,12 +4,11 @@ This document outlines how to orchestrate end-to-end integration tests that exer
 
 ## Automated Acceptance Harness
 
-The repository now ships with executable acceptance tests that orchestrate the gateway service, management Azure Functions, and the ops console integration layer through the four business scenarios. A lightweight Azure Service Bus emulator container is included so that every management-to-EA instruction transits the same queue interface used in production, while the suites exercise the public HTTP surfaces to validate resulting EA outbox state.
+The repository now ships with a Playwright-based acceptance suite that coordinates the gateway service, management Azure Functions, and the Service Bus emulator to exercise the four business scenarios end-to-end. The tests rely on Playwright’s APIRequestContext so every assertion is performed through the public HTTP surfaces exposed to the ops console and Expert Advisors.
 
-- **Rust test suite** – `cargo test --manifest-path tests/acceptance/Cargo.toml` drives the gateway via its public APIs and the management Azure Functions endpoints.
-- **Ops console integration suite** – `npm run test:integration` from `opsconsole/` runs Vitest-based acceptance tests that use the console’s HTTP clients to approve sessions, manage copy-trade groups, and dispatch copy orders against live gateway and Functions instances.
-- **Docker Compose** – `docker compose run acceptance` executes the Rust suite, while `docker compose run opsconsole-tests` installs the console dependencies and runs the Vitest scenarios against the same containerised gateway/management stack. The compose file provisions the Service Bus emulator automatically so admin approvals, copy-trade broadcasts, and follower trade orders all flow across the queue integration without requiring Azure connectivity. Environment variables preconfigure development authentication so the tests can approve sessions and queue copy trades end-to-end.
-- **CI hooks** – Invoke the commands above inside your automation. Together the suites assert session approvals, group synchronisation broadcasts, copy-trade fan-out, and trade acknowledgements across the combined services from both the API and console perspectives.
+- **Playwright suite** – From `tests/playwright/`, run `npm install` once and then `npx playwright test` (or `npm test`) to execute all scenarios serially. The suite provisions dedicated HTTP clients for the gateway and management APIs, approves EA sessions, manages copy-trade groups, and asserts EA outbox state for every order dispatched.
+- **Service orchestration** – Start the runtime dependencies with `docker compose up servicebus gateway management`. The Playwright suite consumes the same environment variables used by prior harnesses (`GATEWAY_BASE_URL`, `MANAGEMENT_BASE_URL`, `OPS_BEARER_TOKEN`) so the tests can target either local containers or remote deployments without modification.
+- **CI integration** – Invoke the Playwright commands above within your pipeline after bringing the services online. The generated HTML report in `tests/playwright/playwright-report/` captures request metadata, payloads, and assertion output for troubleshooting.
 
 The sections below remain as the high-level manual test choreography and can be used to extend the automated harness with additional checks or cross-system assertions.
 

@@ -12,6 +12,7 @@ local.settings.json
 
 # Node/npm
 node_modules/
+playwright-report/
 
 # IDE
 .vscode/
