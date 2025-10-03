@@ -4,7 +4,11 @@ import { expect, userEvent, within } from '@storybook/test';
 import { navigationItems } from '../../data/console.ts';
 import { Sidebar } from './Sidebar';
 
-const meta: Meta<typeof Sidebar> = {
+type SidebarStoryProps = React.ComponentProps<typeof Sidebar> & {
+  initialPath?: string;
+};
+
+const meta: Meta<SidebarStoryProps> = {
   component: Sidebar,
   title: 'Layout/Sidebar',
   args: {
@@ -28,7 +32,7 @@ const meta: Meta<typeof Sidebar> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<SidebarStoryProps>;
 
 export const Default: Story = {
   play: async ({ canvasElement }) => {
