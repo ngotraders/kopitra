@@ -4,6 +4,8 @@ namespace Kopitra.ManagementApi.Infrastructure.Authentication;
 
 public sealed class ManagementAuthenticationOptions
 {
+    public string Mode { get; set; } = "Oidc";
+
     public string Authority { get; set; } = string.Empty;
 
     public string? MetadataAddress { get; set; }

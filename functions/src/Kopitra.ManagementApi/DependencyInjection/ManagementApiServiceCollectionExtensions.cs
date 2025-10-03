@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EventFlow.DependencyInjection.Extensions;
 using EventFlow.Extensions;
+using System.Net.Http;
 using Kopitra.ManagementApi.Application.AdminUsers.Commands;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
 using Kopitra.ManagementApi.Application.CopyTrading.Commands;
@@ -18,6 +19,7 @@ using Kopitra.ManagementApi.Domain.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 using Kopitra.ManagementApi.Infrastructure.Eventing;
+using Kopitra.ManagementApi.Infrastructure.Gateway;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
 using Kopitra.ManagementApi.Infrastructure.Projections;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
@@ -26,6 +28,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Kopitra.ManagementApi.DependencyInjection;
 
@@ -45,10 +49,41 @@ public static class ManagementApiServiceCollectionExtensions
         services.TryAddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
         services.TryAddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.TryAddSingleton<AdminRequestContextFactory>();
-        services.TryAddSingleton<IAccessTokenValidator, OidcAccessTokenValidator>();
 
         services.AddOptions<ManagementAuthenticationOptions>()
             .BindConfiguration("ManagementApi:Authentication", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
+
+        services.AddOptions<GatewayAdminClientOptions>()
+            .BindConfiguration("ManagementApi:Gateway", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
+
+        services.AddHttpClient(nameof(HttpGatewayAdminClient));
+
+        services.AddSingleton<IGatewayAdminClient>(sp =>
+        {
+            var gatewayOptions = sp.GetRequiredService<IOptions<GatewayAdminClientOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(gatewayOptions.BaseUrl))
+            {
+                return new NullGatewayAdminClient();
+            }
+
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var logger = sp.GetRequiredService<ILogger<HttpGatewayAdminClient>>();
+            var client = factory.CreateClient(nameof(HttpGatewayAdminClient));
+            return new HttpGatewayAdminClient(client, sp.GetRequiredService<IOptions<GatewayAdminClientOptions>>(), logger);
+        });
+
+        services.AddSingleton<CopyTradeGroupBroadcaster>();
+
+        services.AddSingleton<IAccessTokenValidator>(sp =>
+        {
+            var authOptions = sp.GetRequiredService<IOptions<ManagementAuthenticationOptions>>().Value;
+            if (string.Equals(authOptions.Mode, "Development", StringComparison.OrdinalIgnoreCase))
+            {
+                return new DevelopmentAccessTokenValidator();
+            }
+
+            return ActivatorUtilities.CreateInstance<OidcAccessTokenValidator>(sp);
+        });
 
         services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
         services.TryAddScoped<IQueryDispatcher, QueryDispatcher>();

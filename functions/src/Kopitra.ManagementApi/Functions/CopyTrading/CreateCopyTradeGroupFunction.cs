@@ -6,6 +6,7 @@ using Kopitra.ManagementApi.Application.CopyTrading.Commands;
 using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
+using Kopitra.ManagementApi.Infrastructure.Gateway;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -19,13 +20,16 @@ public sealed class CreateCopyTradeGroupFunction
 {
     private readonly ICommandDispatcher _commandDispatcher;
     private readonly AdminRequestContextFactory _contextFactory;
+    private readonly CopyTradeGroupBroadcaster _broadcaster;
 
     public CreateCopyTradeGroupFunction(
         ICommandDispatcher commandDispatcher,
-        AdminRequestContextFactory contextFactory)
+        AdminRequestContextFactory contextFactory,
+        CopyTradeGroupBroadcaster broadcaster)
     {
         _commandDispatcher = commandDispatcher;
         _contextFactory = contextFactory;
+        _broadcaster = broadcaster;
     }
 
     [Function("CreateCopyTradeGroup")]
@@ -56,6 +60,7 @@ public sealed class CreateCopyTradeGroupFunction
 
             var command = new CreateCopyTradeGroupCommand(context.TenantId, payload.GroupId, payload.Name, payload.Description, payload.RequestedBy);
             var resultModel = await _commandDispatcher.DispatchAsync(command, cancellationToken);
+            await _broadcaster.BroadcastAsync(resultModel, cancellationToken).ConfigureAwait(false);
             return await request.CreateJsonResponseAsync(HttpStatusCode.Created, resultModel, cancellationToken);
         }
         catch (HttpRequestValidationException ex)

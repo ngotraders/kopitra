@@ -4,11 +4,12 @@ This document outlines how to orchestrate end-to-end integration tests that exer
 
 ## Automated Acceptance Harness
 
-The repository now ships with executable acceptance tests that drive the gateway service through the four business scenarios. They run entirely against the in-memory application state, so no external brokers or queues are required.
+The repository now ships with executable acceptance tests that orchestrate the gateway service, management Azure Functions, and the ops console integration layer through the four business scenarios. The suites exercise the HTTP flows used in production and verify the resulting EA outbox state, so no external brokers or queues are required.
 
-- **Rust test suite** – `cargo test --manifest-path gateway/Cargo.toml --test acceptance_copy_trading`
-- **Docker Compose** – `docker compose run acceptance` builds a disposable container that executes the same Rust suite. The `gateway` service container is provided for manual exploration and mirrors the binary executed in staging.
-- **CI hooks** – The new tests can be incorporated into automation by invoking either command above. They emit structured JSON assertions that cover session approvals, group synchronization, order dispatch, and execution acknowledgements.
+- **Rust test suite** – `cargo test --manifest-path tests/acceptance/Cargo.toml` drives the gateway via its public APIs and the management Azure Functions endpoints.
+- **Ops console integration suite** – `npm run test:integration` from `opsconsole/` runs Vitest-based acceptance tests that use the console’s HTTP clients to approve sessions, manage copy-trade groups, and dispatch copy orders against live gateway and Functions instances.
+- **Docker Compose** – `docker compose run acceptance` executes the Rust suite, while `docker compose run opsconsole-tests` installs the console dependencies and runs the Vitest scenarios against the same containerised gateway/management stack. Environment variables preconfigure development authentication so the tests can approve sessions and queue copy trades end-to-end.
+- **CI hooks** – Invoke the commands above inside your automation. Together the suites assert session approvals, group synchronisation broadcasts, copy-trade fan-out, and trade acknowledgements across the combined services from both the API and console perspectives.
 
 The sections below remain as the high-level manual test choreography and can be used to extend the automated harness with additional checks or cross-system assertions.
 

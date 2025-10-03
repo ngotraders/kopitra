@@ -28,6 +28,14 @@ pub fn router(state: AppState) -> Router {
         .route("/trade-agent/v1/sessions", post(create_session))
         .route("/trade-agent/v1/sessions/current", delete(delete_session))
         .route(
+            "/trade-agent/v1/admin/enqueue",
+            post(enqueue_admin_envelope),
+        )
+        .route(
+            "/trade-agent/v1/admin/accounts/:account_id/sessions/active",
+            get(fetch_active_session_summary),
+        )
+        .route(
             "/trade-agent/v1/sessions/current/inbox",
             post(ingest_inbox_events),
         )
@@ -52,6 +60,22 @@ pub struct AppState {
 struct SharedState {
     sessions: HashMap<String, AccountSessions>,
     idempotency: HashMap<String, StoredResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub account_id: String,
+    pub session_id: Uuid,
+    pub status: SessionStatus,
+    pub auth_method: AuthMethod,
+    pub auth_key_fingerprint: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub last_heartbeat_at: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +173,13 @@ impl AccountSessions {
         self.sessions_by_token.is_empty() && self.preapproved.is_empty()
     }
 
+    fn active_session(&self) -> Option<&SessionRecord> {
+        self.sessions_by_token
+            .values()
+            .filter(|session| session.status != SessionStatus::Terminated)
+            .max_by_key(|session| session.updated_at)
+    }
+
     fn register_preapproval(&mut self, fingerprint: String, record: PreapprovalRecord) {
         self.preapproved.insert(fingerprint, record);
     }
@@ -181,6 +212,23 @@ impl PreapprovalRecord {
 impl AppState {
     async fn stored_response(&self, key: &str) -> Option<StoredResponse> {
         self.inner.lock().await.idempotency.get(key).cloned()
+    }
+
+    pub async fn active_session_summary(&self, account: &str) -> Option<SessionSummary> {
+        let inner = self.inner.lock().await;
+        let sessions = inner.sessions.get(account)?;
+        let session = sessions.active_session()?;
+
+        Some(SessionSummary {
+            account_id: account.to_string(),
+            session_id: session.session_id,
+            status: session.status,
+            auth_method: session.auth_method,
+            auth_key_fingerprint: session.auth_key_hash.clone(),
+            created_at: session.created_at,
+            updated_at: session.updated_at,
+            last_heartbeat_at: session.last_heartbeat_at,
+        })
     }
 
     pub async fn enqueue_outbox_event(
@@ -1522,6 +1570,48 @@ async fn create_session(
     info!(account = %account, session = %response_body.session_id, "session created");
 
     Ok(stored.into_response())
+}
+
+async fn enqueue_admin_envelope(
+    State(state): State<AppState>,
+    Json(envelope): Json<admin::AdminEnqueueRequest>,
+) -> Result<Response, ApiError> {
+    admin::apply_envelope(&state, envelope)
+        .await
+        .map(|_| StatusCode::ACCEPTED.into_response())
+        .map_err(|error| match error {
+            admin::MessageHandlingError::Admin { source, .. } => match source {
+                AdminCommandError::SessionMissing => {
+                    ApiError::not_found("session_missing", source.to_string())
+                }
+                AdminCommandError::SessionMismatch => {
+                    ApiError::conflict("session_mismatch", source.to_string())
+                }
+                AdminCommandError::AuthenticationFailed => {
+                    ApiError::unauthorized("authentication_failed", source.to_string())
+                }
+                AdminCommandError::SessionTerminated => {
+                    ApiError::conflict("session_terminated", source.to_string())
+                }
+                AdminCommandError::AuthenticationKeyEmpty => {
+                    ApiError::bad_request("auth_key_empty", source.to_string())
+                }
+            },
+            admin::MessageHandlingError::Api { source, .. } => source,
+        })
+}
+
+async fn fetch_active_session_summary(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Response, ApiError> {
+    match state.active_session_summary(&account_id).await {
+        Some(summary) => Ok((StatusCode::OK, Json(summary)).into_response()),
+        None => Err(ApiError::not_found(
+            "active_session_missing",
+            "No active session is registered for the supplied account.",
+        )),
+    }
 }
 
 async fn delete_session(

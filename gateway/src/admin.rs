@@ -171,7 +171,7 @@ impl ServiceBusWorker {
                             continue;
                         }
 
-                        match serde_json::from_str::<AdminBusEnvelope>(&body) {
+                        match serde_json::from_str::<AdminEnqueueRequest>(&body) {
                             Ok(envelope) => {
                                 let result = process_envelope(&state, envelope, &queue_name).await;
 
@@ -254,7 +254,7 @@ impl ServiceBusWorker {
 }
 
 #[derive(Debug, Error)]
-enum MessageHandlingError {
+pub(crate) enum MessageHandlingError {
     #[error("{source}")]
     Admin {
         account: String,
@@ -302,7 +302,7 @@ async fn handle_command(
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-enum AdminBusEnvelope {
+pub(crate) enum AdminEnqueueRequest {
     AuthApproval(AuthApprovalMessage),
     AuthReject(AuthRejectMessage),
     QueueOutboxEvent(OutboxEventMessage),
@@ -311,7 +311,7 @@ enum AdminBusEnvelope {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AuthApprovalMessage {
+pub(crate) struct AuthApprovalMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(alias = "authKeyHash")]
@@ -324,7 +324,7 @@ struct AuthApprovalMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AuthRejectMessage {
+pub(crate) struct AuthRejectMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(alias = "authKeyHash")]
@@ -337,7 +337,7 @@ struct AuthRejectMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OutboxEventMessage {
+pub(crate) struct OutboxEventMessage {
     account_id: String,
     session_id: Uuid,
     event_type: String,
@@ -349,7 +349,7 @@ struct OutboxEventMessage {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TradeOrderMessage {
+pub(crate) struct TradeOrderMessage {
     account_id: String,
     session_id: Uuid,
     #[serde(flatten)]
@@ -360,13 +360,20 @@ const fn default_requires_ack_true() -> bool {
     true
 }
 
+pub(crate) async fn apply_envelope(
+    state: &AppState,
+    envelope: AdminEnqueueRequest,
+) -> Result<(), MessageHandlingError> {
+    process_envelope(state, envelope, "http-admin").await
+}
+
 async fn process_envelope(
     state: &AppState,
-    envelope: AdminBusEnvelope,
+    envelope: AdminEnqueueRequest,
     queue_name: &str,
 ) -> Result<(), MessageHandlingError> {
     match envelope {
-        AdminBusEnvelope::AuthApproval(message) => {
+        AdminEnqueueRequest::AuthApproval(message) => {
             let account = message.account_id.clone();
             let session_id = message.session_id;
             let command = AdminCommand::Approve(AdminApprovalCommand {
@@ -381,7 +388,7 @@ async fn process_envelope(
                 .await
                 .map_err(|source| MessageHandlingError::Admin { account, source })
         }
-        AdminBusEnvelope::AuthReject(message) => {
+        AdminEnqueueRequest::AuthReject(message) => {
             let account = message.account_id.clone();
             let session_id = message.session_id;
             let command = AdminCommand::Reject(AdminRejectionCommand {
@@ -396,10 +403,10 @@ async fn process_envelope(
                 .await
                 .map_err(|source| MessageHandlingError::Admin { account, source })
         }
-        AdminBusEnvelope::QueueOutboxEvent(message) => {
+        AdminEnqueueRequest::QueueOutboxEvent(message) => {
             process_outbox_event(state, message, queue_name).await
         }
-        AdminBusEnvelope::TradeOrder(message) => {
+        AdminEnqueueRequest::TradeOrder(message) => {
             process_trade_order(state, message, queue_name).await
         }
     }
