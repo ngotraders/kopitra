@@ -14,11 +14,13 @@ import { CopyTradingWorkbench } from './CopyTradingWorkbench.tsx';
 class MockClient implements CopyTradingClient {
   private sessions = new Map<string, ExpertAdvisorSession>();
   private outboxes = new Map<string, OutboxEvent[]>();
+  private approvals = new Set<string>();
 
   async connectExpertAdvisor(
     accountId: string,
-    _authenticationKey: string,
+    authenticationKey: string,
   ): Promise<ExpertAdvisorSession> {
+    void authenticationKey;
     const session: ExpertAdvisorSession = {
       accountId,
       sessionId: `${accountId}-session`,
@@ -31,9 +33,11 @@ class MockClient implements CopyTradingClient {
   }
 
   async approveExpertAdvisorSession(
-    _session: ExpertAdvisorSession,
-    _approvedBy: string,
-  ): Promise<void> {}
+    session: ExpertAdvisorSession,
+    approvedBy: string,
+  ): Promise<void> {
+    this.approvals.add(`${session.sessionId}:${approvedBy}`);
+  }
 
   async clearOutbox(session: ExpertAdvisorSession): Promise<void> {
     this.outboxes.set(session.accountId, []);
@@ -43,17 +47,35 @@ class MockClient implements CopyTradingClient {
     return this.outboxes.get(session.accountId) ?? [];
   }
 
-  async acknowledgeOutbox(session: ExpertAdvisorSession, _events: OutboxEvent[]): Promise<void> {
+  async acknowledgeOutbox(session: ExpertAdvisorSession, events: OutboxEvent[]): Promise<void> {
+    if (events.length === 0) {
+      return;
+    }
     this.outboxes.set(session.accountId, []);
   }
 
-  async enqueueTradeOrder(_input: TradeCommandInput): Promise<void> {}
+  async enqueueTradeOrder(input: TradeCommandInput): Promise<void> {
+    const events = this.outboxes.get(input.accountId) ?? [];
+    events.push({
+      id: `${input.accountId}-order-${events.length + 1}`,
+      eventType: 'OrderCommand',
+      payload: { commandType: input.commandType, instrument: input.instrument },
+      requiresAck: true,
+    });
+    this.outboxes.set(input.accountId, events);
+  }
 
-  async createCopyGroup(_input: CreateCopyGroupInput): Promise<void> {}
+  async createCopyGroup(input: CreateCopyGroupInput): Promise<void> {
+    void input;
+  }
 
-  async upsertCopyGroupMember(_input: CopyGroupMemberInput): Promise<void> {}
+  async upsertCopyGroupMember(input: CopyGroupMemberInput): Promise<void> {
+    void input;
+  }
 
-  async executeCopyTrade(_input: CopyTradeExecutionInput): Promise<void> {}
+  async executeCopyTrade(input: CopyTradeExecutionInput): Promise<void> {
+    void input;
+  }
 }
 
 const meta: Meta<typeof CopyTradingWorkbench> = {

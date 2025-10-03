@@ -26,7 +26,6 @@ describe.sequential('Ops console copy trading integration', () => {
     await waitForGateway();
     await waitForManagement();
     // Log base URLs for easier troubleshooting when running in CI.
-    // eslint-disable-next-line no-console
     console.log('Integration targets', {
       management: config.managementBaseUrl,
       gateway: config.gatewayBaseUrl,
@@ -321,13 +320,15 @@ describe.sequential('Ops console copy trading integration', () => {
 
     const orderA = findEvent(followerAOrders, 'OrderCommand');
     expect(orderA).toBeTruthy();
-    expect((orderA?.payload as Record<string, unknown>).instrument).toBe('GBPUSD');
-    expect((orderA?.payload as Record<string, any>).metadata.groupId).toBe(groupA);
+    const orderAPayload = orderA?.payload as OrderCommandPayload | undefined;
+    expect(orderAPayload?.instrument).toBe('GBPUSD');
+    expect(orderAPayload?.metadata?.groupId).toBe(groupA);
 
     const orderB = findEvent(followerBOrders, 'OrderCommand');
     expect(orderB).toBeTruthy();
-    expect((orderB?.payload as Record<string, unknown>).instrument).toBe('AUDUSD');
-    expect((orderB?.payload as Record<string, any>).metadata.groupId).toBe(groupB);
+    const orderBPayload = orderB?.payload as OrderCommandPayload | undefined;
+    expect(orderBPayload?.instrument).toBe('AUDUSD');
+    expect(orderBPayload?.metadata?.groupId).toBe(groupB);
 
     await acknowledgeOutboxEvents(followerA, followerAOrders);
     await acknowledgeOutboxEvents(followerB, followerBOrders);
@@ -453,21 +454,27 @@ describe.sequential('Ops console copy trading integration', () => {
 
     await sleep(RETRY_DELAY_MS);
     const sharedOrders = await fetchSessionOutbox(followerShared);
-    const swingOrder = sharedOrders.find(
-      (event) =>
-        event.eventType === 'OrderCommand' &&
-        (event.payload as Record<string, any>).metadata.groupId === swingGroup,
-    );
-    const hedgeOrder = sharedOrders.find(
-      (event) =>
-        event.eventType === 'OrderCommand' &&
-        (event.payload as Record<string, any>).metadata.groupId === hedgeGroup,
-    );
+    const swingOrder = sharedOrders.find((event) => {
+      if (event.eventType !== 'OrderCommand') {
+        return false;
+      }
+      const payload = event.payload as OrderCommandPayload;
+      return payload.metadata?.groupId === swingGroup;
+    });
+    const hedgeOrder = sharedOrders.find((event) => {
+      if (event.eventType !== 'OrderCommand') {
+        return false;
+      }
+      const payload = event.payload as OrderCommandPayload;
+      return payload.metadata?.groupId === hedgeGroup;
+    });
 
     expect(swingOrder).toBeTruthy();
-    expect((swingOrder?.payload as Record<string, unknown>).instrument).toBe('NZDJPY');
+    const swingPayload = swingOrder?.payload as OrderCommandPayload | undefined;
+    expect(swingPayload?.instrument).toBe('NZDJPY');
     expect(hedgeOrder).toBeTruthy();
-    expect((hedgeOrder?.payload as Record<string, unknown>).instrument).toBe('USDCHF');
+    const hedgePayload = hedgeOrder?.payload as OrderCommandPayload | undefined;
+    expect(hedgePayload?.instrument).toBe('USDCHF');
 
     await acknowledgeOutboxEvents(followerShared, sharedOrders);
   });
@@ -522,14 +529,20 @@ async function waitForSessionAuthentication(session: ExpertAdvisorSession) {
   throw new Error(`Session for ${session.accountId} did not authenticate in time.`);
 }
 
-function findEvent(events: Iterable<{ eventType: string }>, eventType: string) {
+function findEvent<T extends { eventType: string }>(events: Iterable<T>, eventType: string): T | undefined {
   for (const event of events) {
     if (event.eventType === eventType) {
-      return event as { eventType: string; payload: Record<string, unknown> };
+      return event;
     }
   }
   return undefined;
 }
+
+type OrderCommandPayload = Record<string, unknown> & {
+  instrument?: string;
+  commandType?: string;
+  metadata?: (Record<string, unknown> & { groupId?: string }) | undefined;
+};
 
 async function sleep(durationMs: number) {
   await new Promise((resolve) => setTimeout(resolve, durationMs));

@@ -120,7 +120,12 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
     if (!copyTradeForm.sourceAccount && availableSessions.length) {
       setCopyTradeForm((current) => ({ ...current, sourceAccount: availableSessions[0].id }));
     }
-  }, [availableSessions]);
+  }, [
+    availableSessions,
+    copyTradeForm.sourceAccount,
+    memberForm.accountId,
+    tradeForm.sessionAccountId,
+  ]);
 
   useEffect(() => {
     if (!memberForm.groupId && groups.length) {
@@ -129,7 +134,7 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
     if (!copyTradeForm.groupId && groups.length) {
       setCopyTradeForm((current) => ({ ...current, groupId: groups[0].id }));
     }
-  }, [groups]);
+  }, [copyTradeForm.groupId, groups, memberForm.groupId]);
 
   const handleConnect = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
