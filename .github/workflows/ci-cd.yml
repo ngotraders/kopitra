@@ -1,4 +1,4 @@
-name: CI/CD Placeholder
+name: CI/CD
 
 on:
   push:
@@ -6,6 +6,16 @@ on:
       - main
   pull_request:
     branches: [ main ]
+
+env:
+  WORKLOAD_NAME: kopitra
+  ENVIRONMENT: dev
+  LOCATION: japaneast
+  OWNER_CONTACT: trading-ops@example.com
+  COST_CENTER: FIN-1234
+  DATA_CLASSIFICATION: Confidential
+  SQL_ADMIN_LOGIN: kopitraadmin
+  PARAMETERS_FILE: infra/parameters/dev.json
 
 permissions:
   contents: read
@@ -18,6 +28,7 @@ jobs:
       gateway: ${{ steps.filter.outputs.gateway }}
       functions: ${{ steps.filter.outputs.functions }}
       opsconsole: ${{ steps.filter.outputs.opsconsole }}
+      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,17 +46,63 @@ jobs:
               - 'functions/**'
             opsconsole:
               - 'opsconsole/**'
+            infra:
+              - 'infra/**'
 
-  gateway:
-    name: Gateway pipeline
+  infra:
+    name: Infrastructure deployment
     needs: changes
-    if: needs.changes.outputs.gateway == 'true'
+    if: github.event_name != 'pull_request' && (needs.changes.outputs.infra == 'true' || needs.changes.outputs.gateway == 'true' || needs.changes.outputs.functions == 'true' || needs.changes.outputs.opsconsole == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Placeholder build step
-        run: echo "Building services..."
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group exists
+        run: |
+          workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
+          env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
+          echo "RESOURCE_GROUP=${workload}-rg-${env_suffix}" >> "$GITHUB_ENV"
+          az group create --name "${workload}-rg-${env_suffix}" --location "$LOCATION"
+
+      - name: Deploy infrastructure
+        env:
+          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+        run: |
+          if [ -z "$SQL_ADMIN_PASSWORD" ]; then
+            echo "SQL_ADMIN_PASSWORD secret must be configured" >&2
+            exit 1
+          fi
+          az deployment group create \
+            --name "kopitra-${ENVIRONMENT}-$(date +%Y%m%d%H%M%S)" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters @${PARAMETERS_FILE} \
+            --parameters sqlAdministratorPassword="$SQL_ADMIN_PASSWORD"
+
+  gateway:
+    name: Gateway pipeline
+    needs:
+      - changes
+      - infra
+    if: needs.changes.outputs.gateway == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -74,15 +131,57 @@ jobs:
         working-directory: gateway
         run: cargo test --all --locked
 
-      - name: Deploy gateway
+      - name: Prepare deployment variables
         if: github.event_name != 'pull_request'
-        run: echo "Deploying gateway package..."
+        run: |
+          workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
+          env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
+          echo "RESOURCE_GROUP=${workload}-rg-${env_suffix}" >> "$GITHUB_ENV"
+          echo "ACR_NAME=${workload}${env_suffix}acr" >> "$GITHUB_ENV"
+          echo "ACR_LOGIN_SERVER=${workload}${env_suffix}acr.azurecr.io" >> "$GITHUB_ENV"
+          echo "CONTAINER_APP_NAME=${workload}-gateway-aca-${env_suffix}" >> "$GITHUB_ENV"
+
+      - name: Azure login
+        if: github.event_name != 'pull_request'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps extension
+        if: github.event_name != 'pull_request'
+        run: az extension add --name containerapp --yes --upgrade
+
+      - name: Build gateway image
+        if: github.event_name != 'pull_request'
+        run: docker build -f gateway/Dockerfile -t gateway .
+
+      - name: Push image to ACR
+        if: github.event_name != 'pull_request'
+        run: |
+          az acr login --name "$ACR_NAME"
+          docker tag gateway "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
+          docker push "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
+
+      - name: Update Container App revision
+        if: github.event_name != 'pull_request'
+        run: |
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
 
   functions:
     name: Functions pipeline
-    needs: changes
-    if: needs.changes.outputs.functions == 'true'
+    needs:
+      - changes
+      - infra
+    if: needs.changes.outputs.functions == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -118,15 +217,49 @@ jobs:
         working-directory: functions
         run: dotnet test Functions.sln --no-build
 
-      - name: Deploy functions
+      - name: Prepare deployment variables
         if: github.event_name != 'pull_request'
-        run: echo "Deploying functions app..."
+        run: |
+          workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
+          env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
+          echo "RESOURCE_GROUP=${workload}-rg-${env_suffix}" >> "$GITHUB_ENV"
+          echo "FUNCTION_APP_NAME=${workload}-func-${env_suffix}" >> "$GITHUB_ENV"
+
+      - name: Azure login
+        if: github.event_name != 'pull_request'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Publish Functions package
+        if: github.event_name != 'pull_request'
+        working-directory: functions
+        run: |
+          dotnet publish src/Kopitra.ManagementApi/Kopitra.ManagementApi.csproj -c Release -o publish
+          cd publish
+          zip -r ../publish.zip .
+
+      - name: Deploy Functions app
+        if: github.event_name != 'pull_request'
+        working-directory: functions
+        run: |
+          az functionapp deployment source config-zip \
+            --name "$FUNCTION_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --src publish.zip
 
   opsconsole:
     name: Ops console pipeline
-    needs: changes
-    if: needs.changes.outputs.opsconsole == 'true'
+    needs:
+      - changes
+      - infra
+    if: needs.changes.outputs.opsconsole == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -162,3 +295,41 @@ jobs:
       - name: Build Storybook
         working-directory: opsconsole
         run: npm run build-storybook
+
+      - name: Prepare deployment variables
+        if: github.event_name != 'pull_request'
+        run: |
+          workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
+          env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
+          echo "RESOURCE_GROUP=${workload}-rg-${env_suffix}" >> "$GITHUB_ENV"
+          echo "STATIC_WEB_APP_NAME=${workload}-ops-${env_suffix}" >> "$GITHUB_ENV"
+
+      - name: Azure login
+        if: github.event_name != 'pull_request'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Static Web Apps extension
+        if: github.event_name != 'pull_request'
+        run: az extension add --name staticwebapp --yes --upgrade
+
+      - name: Install Static Web Apps CLI
+        if: github.event_name != 'pull_request'
+        run: npm install -g @azure/static-web-apps-cli
+
+      - name: Deploy static assets
+        if: github.event_name != 'pull_request'
+        working-directory: opsconsole
+        run: |
+          TOKEN=$(az staticwebapp secrets list \
+            --name "$STATIC_WEB_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "properties.apiKey" -o tsv)
+          if [ -z "$TOKEN" ]; then
+            echo "Unable to retrieve deployment token for Static Web App" >&2
+            exit 1
+          fi
+          swa deploy ./dist --env production --deployment-token "$TOKEN"
