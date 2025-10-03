@@ -6,7 +6,6 @@ import {
   clearSessionOutbox,
   createExpertAdvisorSession,
   fetchSessionOutbox,
-  getActiveSessionSummary,
   type ExpertAdvisorSession,
 } from './expertAdvisorSessions.ts';
 import { executeCopyTradeOrder, createCopyTradeGroup, getCopyTradeGroup, upsertCopyTradeGroupMember } from './copyTradeGroups.ts';
@@ -42,7 +41,7 @@ describe.sequential('Ops console copy trading integration', () => {
       approvedBy: 'ops-console',
     });
 
-    await waitForSessionAuthentication(accountId);
+    await waitForSessionAuthentication(session);
 
     await enqueueExpertAdvisorTradeOrder({
       expertAdvisorId: accountId,
@@ -124,8 +123,8 @@ describe.sequential('Ops console copy trading integration', () => {
     ]);
 
     await Promise.all([
-      waitForSessionAuthentication(leaderAccount),
-      waitForSessionAuthentication(followerAccount),
+      waitForSessionAuthentication(leader),
+      waitForSessionAuthentication(follower),
     ]);
 
     await createCopyTradeGroup({
@@ -213,7 +212,7 @@ describe.sequential('Ops console copy trading integration', () => {
       ),
     );
 
-    await Promise.all(sessions.map((session) => waitForSessionAuthentication(session.accountId)));
+    await Promise.all(sessions.map((session) => waitForSessionAuthentication(session)));
 
     const groupA = uniqueId('momentum-alpha');
     const groupB = uniqueId('momentum-beta');
@@ -343,7 +342,7 @@ describe.sequential('Ops console copy trading integration', () => {
       ),
     );
 
-    await Promise.all(sessions.map((session) => waitForSessionAuthentication(session.accountId)));
+    await Promise.all(sessions.map((session) => waitForSessionAuthentication(session)));
 
     const swingGroup = uniqueId('swing-cadre');
     const hedgeGroup = uniqueId('hedge-cadre');
@@ -490,19 +489,17 @@ async function waitForManagement() {
   throw new Error('Management API did not become ready in time.');
 }
 
-async function waitForSessionAuthentication(accountId: string) {
+async function waitForSessionAuthentication(session: ExpertAdvisorSession) {
   for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt += 1) {
     try {
-      const summary = await getActiveSessionSummary(accountId);
-      if (summary.status === 'authenticated') {
-        return;
-      }
+      await fetchSessionOutbox(session);
+      return;
     } catch {
       // retry if the session is not yet present
     }
     await sleep(RETRY_DELAY_MS);
   }
-  throw new Error(`Session for ${accountId} did not authenticate in time.`);
+  throw new Error(`Session for ${session.accountId} did not authenticate in time.`);
 }
 
 function findEvent(events: Iterable<{ eventType: string }>, eventType: string) {

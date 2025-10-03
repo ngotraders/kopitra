@@ -8,17 +8,6 @@ export interface ExpertAdvisorSession {
   authKeyFingerprint: string;
 }
 
-export interface SessionSummary {
-  accountId: string;
-  sessionId: string;
-  status: 'pending' | 'authenticated' | 'terminated';
-  authMethod: 'account_session_key' | 'pre_shared_key';
-  authKeyFingerprint: string;
-  createdAt: string;
-  updatedAt: string;
-  lastHeartbeatAt?: string | null;
-}
-
 export interface OutboxEvent {
   id: string;
   sequence: number;
@@ -59,14 +48,6 @@ export async function createExpertAdvisorSession(
     sessionToken: payload.sessionToken,
     authKeyFingerprint: computeAuthKeyFingerprint(authenticationKey, accountId),
   };
-}
-
-export async function getActiveSessionSummary(accountId: string): Promise<SessionSummary> {
-  const response = await gatewayRequest(
-    `/trade-agent/v1/admin/accounts/${encodeURIComponent(accountId)}/sessions/active`,
-  );
-  await expectGatewayOk(response);
-  return (await response.json()) as SessionSummary;
 }
 
 export async function fetchSessionOutbox(session: ExpertAdvisorSession): Promise<OutboxEvent[]> {

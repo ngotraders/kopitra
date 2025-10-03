@@ -5,7 +5,7 @@ using Kopitra.ManagementApi.Application.CopyTrading.Commands;
 using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
-using Kopitra.ManagementApi.Infrastructure.Gateway;
+using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;

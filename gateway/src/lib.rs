@@ -19,7 +19,9 @@ use uuid::Uuid;
 
 mod admin;
 
-pub use admin::{ServiceBusConfig, ServiceBusConfigError, ServiceBusWorker};
+pub use admin::{
+    ServiceBusConfig, ServiceBusConfigError, ServiceBusWorker, ServiceBusWorkerInitError,
+};
 
 /// Builds the application router for the EA counterparty service.
 pub fn router(state: AppState) -> Router {
@@ -27,14 +29,6 @@ pub fn router(state: AppState) -> Router {
         .route("/trade-agent/v1/health", get(health_handler))
         .route("/trade-agent/v1/sessions", post(create_session))
         .route("/trade-agent/v1/sessions/current", delete(delete_session))
-        .route(
-            "/trade-agent/v1/admin/enqueue",
-            post(enqueue_admin_envelope),
-        )
-        .route(
-            "/trade-agent/v1/admin/accounts/:account_id/sessions/active",
-            get(fetch_active_session_summary),
-        )
         .route(
             "/trade-agent/v1/sessions/current/inbox",
             post(ingest_inbox_events),
@@ -60,22 +54,6 @@ pub struct AppState {
 struct SharedState {
     sessions: HashMap<String, AccountSessions>,
     idempotency: HashMap<String, StoredResponse>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionSummary {
-    pub account_id: String,
-    pub session_id: Uuid,
-    pub status: SessionStatus,
-    pub auth_method: AuthMethod,
-    pub auth_key_fingerprint: String,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub last_heartbeat_at: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,13 +151,6 @@ impl AccountSessions {
         self.sessions_by_token.is_empty() && self.preapproved.is_empty()
     }
 
-    fn active_session(&self) -> Option<&SessionRecord> {
-        self.sessions_by_token
-            .values()
-            .filter(|session| session.status != SessionStatus::Terminated)
-            .max_by_key(|session| session.updated_at)
-    }
-
     fn register_preapproval(&mut self, fingerprint: String, record: PreapprovalRecord) {
         self.preapproved.insert(fingerprint, record);
     }
@@ -214,24 +185,7 @@ impl AppState {
         self.inner.lock().await.idempotency.get(key).cloned()
     }
 
-    pub async fn active_session_summary(&self, account: &str) -> Option<SessionSummary> {
-        let inner = self.inner.lock().await;
-        let sessions = inner.sessions.get(account)?;
-        let session = sessions.active_session()?;
-
-        Some(SessionSummary {
-            account_id: account.to_string(),
-            session_id: session.session_id,
-            status: session.status,
-            auth_method: session.auth_method,
-            auth_key_fingerprint: session.auth_key_hash.clone(),
-            created_at: session.created_at,
-            updated_at: session.updated_at,
-            last_heartbeat_at: session.last_heartbeat_at,
-        })
-    }
-
-    pub async fn enqueue_outbox_event(
+    pub(crate) async fn enqueue_outbox_event(
         &self,
         account: &str,
         session_id: Uuid,
@@ -287,7 +241,7 @@ impl AppState {
         })
     }
 
-    pub async fn enqueue_trade_command(
+    pub(crate) async fn enqueue_trade_command(
         &self,
         account: &str,
         session_id: Uuid,
@@ -815,7 +769,7 @@ struct ErrorBody {
 
 #[derive(Debug, Error)]
 #[error("{message}")]
-pub struct ApiError {
+pub(crate) struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
@@ -1031,21 +985,21 @@ struct InboundEventRecord {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum TradeCommandType {
+pub(crate) enum TradeCommandType {
     Open,
     Close,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum TradeSide {
+pub(crate) enum TradeSide {
     Buy,
     Sell,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum TradeOrderType {
+pub(crate) enum TradeOrderType {
     Market,
     Limit,
     Stop,
@@ -1054,7 +1008,7 @@ pub enum TradeOrderType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum TradeTimeInForce {
+pub(crate) enum TradeTimeInForce {
     Gtc,
     Gtd,
     Gfd,
@@ -1064,59 +1018,59 @@ pub enum TradeTimeInForce {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TradeOrderRequest {
-    pub command_type: TradeCommandType,
-    pub instrument: String,
+pub(crate) struct TradeOrderRequest {
+    command_type: TradeCommandType,
+    instrument: String,
     #[serde(default)]
-    pub order_type: Option<TradeOrderType>,
+    order_type: Option<TradeOrderType>,
     #[serde(default)]
-    pub side: Option<TradeSide>,
+    side: Option<TradeSide>,
     #[serde(default)]
-    pub volume: Option<f64>,
+    volume: Option<f64>,
     #[serde(default)]
-    pub price: Option<f64>,
+    price: Option<f64>,
     #[serde(default)]
-    pub stop_loss: Option<f64>,
+    stop_loss: Option<f64>,
     #[serde(default)]
-    pub take_profit: Option<f64>,
+    take_profit: Option<f64>,
     #[serde(default)]
-    pub time_in_force: Option<TradeTimeInForce>,
+    time_in_force: Option<TradeTimeInForce>,
     #[serde(default)]
-    pub position_id: Option<String>,
+    position_id: Option<String>,
     #[serde(default)]
-    pub client_order_id: Option<String>,
+    client_order_id: Option<String>,
     #[serde(default)]
-    pub metadata: Option<Value>,
+    metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TradeCommandQueued {
-    pub session_id: Uuid,
-    pub event_id: Uuid,
-    pub sequence: u64,
-    pub command_id: Uuid,
-    pub pending_session: bool,
-    pub command_type: TradeCommandType,
-    pub instrument: String,
+pub(crate) struct TradeCommandQueued {
+    session_id: Uuid,
+    event_id: Uuid,
+    sequence: u64,
+    command_id: Uuid,
+    pending_session: bool,
+    command_type: TradeCommandType,
+    instrument: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_type: Option<TradeOrderType>,
+    order_type: Option<TradeOrderType>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub side: Option<TradeSide>,
+    side: Option<TradeSide>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub position_id: Option<String>,
+    position_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub volume: Option<f64>,
+    volume: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OutboxEventRequest {
-    pub event_type: String,
+pub(crate) struct OutboxEventRequest {
+    event_type: String,
     #[serde(default)]
-    pub payload: Value,
+    payload: Value,
     #[serde(default = "default_requires_ack")]
-    pub requires_ack: bool,
+    requires_ack: bool,
 }
 
 const fn default_requires_ack() -> bool {
@@ -1160,10 +1114,10 @@ struct InboxResponse {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPromotionResponse {
-    pub session_id: Uuid,
-    pub status: SessionStatus,
-    pub pending: bool,
-    pub message: String,
+    session_id: Uuid,
+    status: SessionStatus,
+    pending: bool,
+    message: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1184,7 +1138,7 @@ pub enum AdminCommandOutcome {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OutboxEnqueueResponse {
+pub(crate) struct OutboxEnqueueResponse {
     session_id: Uuid,
     event_id: Uuid,
     sequence: u64,
@@ -1570,48 +1524,6 @@ async fn create_session(
     info!(account = %account, session = %response_body.session_id, "session created");
 
     Ok(stored.into_response())
-}
-
-async fn enqueue_admin_envelope(
-    State(state): State<AppState>,
-    Json(envelope): Json<admin::AdminEnqueueRequest>,
-) -> Result<Response, ApiError> {
-    admin::apply_envelope(&state, envelope)
-        .await
-        .map(|_| StatusCode::ACCEPTED.into_response())
-        .map_err(|error| match error {
-            admin::MessageHandlingError::Admin { source, .. } => match source {
-                AdminCommandError::SessionMissing => {
-                    ApiError::not_found("session_missing", source.to_string())
-                }
-                AdminCommandError::SessionMismatch => {
-                    ApiError::conflict("session_mismatch", source.to_string())
-                }
-                AdminCommandError::AuthenticationFailed => {
-                    ApiError::unauthorized("authentication_failed", source.to_string())
-                }
-                AdminCommandError::SessionTerminated => {
-                    ApiError::conflict("session_terminated", source.to_string())
-                }
-                AdminCommandError::AuthenticationKeyEmpty => {
-                    ApiError::bad_request("auth_key_empty", source.to_string())
-                }
-            },
-            admin::MessageHandlingError::Api { source, .. } => source,
-        })
-}
-
-async fn fetch_active_session_summary(
-    State(state): State<AppState>,
-    Path(account_id): Path<String>,
-) -> Result<Response, ApiError> {
-    match state.active_session_summary(&account_id).await {
-        Some(summary) => Ok((StatusCode::OK, Json(summary)).into_response()),
-        None => Err(ApiError::not_found(
-            "active_session_missing",
-            "No active session is registered for the supplied account.",
-        )),
-    }
 }
 
 async fn delete_session(

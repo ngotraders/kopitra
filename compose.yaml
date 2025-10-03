@@ -1,4 +1,10 @@
 services:
+  servicebus:
+    build:
+      context: .
+      dockerfile: servicebus-emulator/Dockerfile
+    ports:
+      - "7075:7075"
   gateway:
     build:
       context: .
@@ -7,6 +13,13 @@ services:
       - "8080:8080"
     environment:
       RUST_LOG: info
+      EA_SERVICE_BUS_NAMESPACE: emulator
+      EA_SERVICE_BUS_QUEUE: ea-admin
+      EA_SERVICE_BUS_POLICY: emulator
+      EA_SERVICE_BUS_KEY: emulator
+      EA_SERVICE_BUS_EMULATOR_BASE_URL: http://servicebus:7075/
+    depends_on:
+      - servicebus
   management:
     build:
       context: .
@@ -16,9 +29,11 @@ services:
       DOTNET_ENVIRONMENT: Development
       FUNCTIONS_WORKER_RUNTIME: dotnet-isolated
       ManagementApi__Authentication__Mode: Development
-      ManagementApi__Gateway__BaseUrl: http://gateway:8080
+      ManagementApi__ServiceBus__EmulatorBaseUrl: http://servicebus:7075/
+      ManagementApi__ServiceBus__AdminQueueName: ea-admin
     depends_on:
       - gateway
+      - servicebus
     ports:
       - "7071:7071"
   acceptance:

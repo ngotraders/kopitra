@@ -7,26 +7,38 @@ using System.Threading;
 using System.Threading.Tasks;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
-using Kopitra.ManagementApi.Infrastructure.Gateway;
+using Kopitra.ManagementApi.Infrastructure.Messaging;
+using Kopitra.ManagementApi.Infrastructure.Sessions;
+using Kopitra.ManagementApi.Time;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Options;
 
 namespace Kopitra.ManagementApi.Functions.ExpertAdvisors;
 
 public sealed class ApproveExpertAdvisorSessionFunction
 {
-    private readonly IGatewayAdminClient _gatewayClient;
+    private readonly IServiceBusPublisher _publisher;
+    private readonly IExpertAdvisorSessionDirectory _sessionDirectory;
+    private readonly ServiceBusOptions _serviceBusOptions;
     private readonly AdminRequestContextFactory _contextFactory;
+    private readonly IClock _clock;
 
     public ApproveExpertAdvisorSessionFunction(
-        IGatewayAdminClient gatewayClient,
-        AdminRequestContextFactory contextFactory)
+        IServiceBusPublisher publisher,
+        IExpertAdvisorSessionDirectory sessionDirectory,
+        IOptions<ServiceBusOptions> serviceBusOptions,
+        AdminRequestContextFactory contextFactory,
+        IClock clock)
     {
-        _gatewayClient = gatewayClient;
+        _publisher = publisher;
+        _sessionDirectory = sessionDirectory;
+        _serviceBusOptions = serviceBusOptions.Value;
         _contextFactory = contextFactory;
+        _clock = clock;
     }
 
     [Function("ApproveExpertAdvisorSession")]
@@ -57,13 +69,31 @@ public sealed class ApproveExpertAdvisorSessionFunction
                 return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_request", "accountId and authKeyFingerprint are required.", cancellationToken);
             }
 
-            await _gatewayClient.ApproveSessionAsync(
+            var approvedBy = payload.ApprovedBy ?? context.Principal?.Identity?.Name;
+
+            var envelope = new
+            {
+                type = "authApproval",
+                accountId = payload.AccountId,
+                sessionId,
+                authKeyFingerprint = payload.AuthKeyFingerprint,
+                approvedBy,
+                expiresAt = payload.ExpiresAt,
+            };
+
+            await _publisher
+                .PublishAsync(_serviceBusOptions.AdminQueueName, envelope, cancellationToken)
+                .ConfigureAwait(false);
+
+            var record = new ExpertAdvisorSessionRecord(
                 payload.AccountId,
                 sessionId,
                 payload.AuthKeyFingerprint,
-                payload.ApprovedBy ?? context.Principal.Identity?.Name,
-                payload.ExpiresAt,
-                cancellationToken).ConfigureAwait(false);
+                approvedBy,
+                _clock.UtcNow,
+                payload.ExpiresAt);
+
+            await _sessionDirectory.RegisterAsync(record, cancellationToken).ConfigureAwait(false);
 
             var response = request.CreateResponse(HttpStatusCode.Accepted);
             return response;

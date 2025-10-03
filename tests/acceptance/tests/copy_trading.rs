@@ -1,6 +1,6 @@
 use std::{env, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use once_cell::sync::{Lazy, OnceCell};
 use reqwest::{Client, Url};
 use serde::Deserialize;
@@ -590,24 +590,23 @@ impl Harness {
     }
 
     async fn assert_session_authenticated(&self, session: &EaSession) -> Result<()> {
-        let url = self.management_url(&format!(
-            "/trade-agent/v1/admin/accounts/{}/sessions/active",
-            session.account
-        ))?;
-        let summary: SessionSummary = self
+        let url = self.gateway_url("/trade-agent/v1/sessions/current/outbox")?;
+        let response = self
             .client
             .get(url)
+            .header("X-TradeAgent-Account", &session.account)
+            .header("Authorization", format!("Bearer {}", session.session_token))
             .send()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
-        anyhow::ensure!(
-            summary.status == SessionStatus::Authenticated,
-            "session for {} not authenticated (status: {:?})",
-            session.account,
-            summary.status
-        );
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "session for {} not authenticated (status: {})",
+                session.account,
+                response.status()
+            ));
+        }
+
         Ok(())
     }
 
@@ -820,20 +819,6 @@ impl Harness {
 struct SessionCreateResponse {
     session_id: Uuid,
     session_token: Uuid,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-enum SessionStatus {
-    Pending,
-    Authenticated,
-    Terminated,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionSummary {
-    status: SessionStatus,
 }
 
 #[derive(Debug, Deserialize)]

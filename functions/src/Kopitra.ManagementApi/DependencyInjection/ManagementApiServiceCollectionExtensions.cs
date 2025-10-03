@@ -16,13 +16,15 @@ using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.Domain.AdminUsers;
+using Kopitra.ManagementApi.Infrastructure;
 using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 using Kopitra.ManagementApi.Infrastructure.Eventing;
-using Kopitra.ManagementApi.Infrastructure.Gateway;
 using Kopitra.ManagementApi.Infrastructure.Messaging;
+using Kopitra.ManagementApi.Infrastructure.Messaging.Http;
 using Kopitra.ManagementApi.Infrastructure.Projections;
 using Kopitra.ManagementApi.Infrastructure.ReadModels;
+using Kopitra.ManagementApi.Infrastructure.Sessions;
 using Kopitra.ManagementApi.Time;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,33 +45,33 @@ public static class ManagementApiServiceCollectionExtensions
         services.AddLogging();
 
         services.TryAddSingleton<IClock, UtcClock>();
-        services.TryAddSingleton<IServiceBusPublisher, InMemoryServiceBusPublisher>();
         services.TryAddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
         services.TryAddSingleton<ICopyTradeGroupReadModelStore, InMemoryCopyTradeGroupReadModelStore>();
         services.TryAddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
         services.TryAddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.TryAddSingleton<AdminRequestContextFactory>();
+        services.TryAddSingleton<IExpertAdvisorSessionDirectory, InMemoryExpertAdvisorSessionDirectory>();
 
         services.AddOptions<ManagementAuthenticationOptions>()
             .BindConfiguration("ManagementApi:Authentication", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
 
-        services.AddOptions<GatewayAdminClientOptions>()
-            .BindConfiguration("ManagementApi:Gateway", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
+        services.AddOptions<ServiceBusOptions>()
+            .BindConfiguration("ManagementApi:ServiceBus", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
 
-        services.AddHttpClient(nameof(HttpGatewayAdminClient));
+        services.AddHttpClient(nameof(HttpServiceBusPublisher));
 
-        services.AddSingleton<IGatewayAdminClient>(sp =>
+        services.AddSingleton<IServiceBusPublisher>(sp =>
         {
-            var gatewayOptions = sp.GetRequiredService<IOptions<GatewayAdminClientOptions>>().Value;
-            if (string.IsNullOrWhiteSpace(gatewayOptions.BaseUrl))
+            var options = sp.GetRequiredService<IOptions<ServiceBusOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.EmulatorBaseUrl))
             {
-                return new NullGatewayAdminClient();
+                var factory = sp.GetRequiredService<IHttpClientFactory>();
+                var client = factory.CreateClient(nameof(HttpServiceBusPublisher));
+                var logger = sp.GetRequiredService<ILogger<HttpServiceBusPublisher>>();
+                return new HttpServiceBusPublisher(client, sp.GetRequiredService<IOptions<ServiceBusOptions>>(), logger);
             }
 
-            var factory = sp.GetRequiredService<IHttpClientFactory>();
-            var logger = sp.GetRequiredService<ILogger<HttpGatewayAdminClient>>();
-            var client = factory.CreateClient(nameof(HttpGatewayAdminClient));
-            return new HttpGatewayAdminClient(client, sp.GetRequiredService<IOptions<GatewayAdminClientOptions>>(), logger);
+            return new InMemoryServiceBusPublisher();
         });
 
         services.AddSingleton<CopyTradeGroupBroadcaster>();

@@ -8,25 +8,33 @@ using System.Threading;
 using System.Threading.Tasks;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
-using Kopitra.ManagementApi.Infrastructure.Gateway;
+using Kopitra.ManagementApi.Infrastructure.Messaging;
+using Kopitra.ManagementApi.Infrastructure.Sessions;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Options;
 
 namespace Kopitra.ManagementApi.Functions.ExpertAdvisors;
 
 public sealed class EnqueueExpertAdvisorTradeOrderFunction
 {
-    private readonly IGatewayAdminClient _gatewayClient;
+    private readonly IServiceBusPublisher _publisher;
+    private readonly IExpertAdvisorSessionDirectory _sessionDirectory;
+    private readonly ServiceBusOptions _serviceBusOptions;
     private readonly AdminRequestContextFactory _contextFactory;
 
     public EnqueueExpertAdvisorTradeOrderFunction(
-        IGatewayAdminClient gatewayClient,
+        IServiceBusPublisher publisher,
+        IExpertAdvisorSessionDirectory sessionDirectory,
+        IOptions<ServiceBusOptions> serviceBusOptions,
         AdminRequestContextFactory contextFactory)
     {
-        _gatewayClient = gatewayClient;
+        _publisher = publisher;
+        _sessionDirectory = sessionDirectory;
+        _serviceBusOptions = serviceBusOptions.Value;
         _contextFactory = contextFactory;
     }
 
@@ -58,25 +66,27 @@ public sealed class EnqueueExpertAdvisorTradeOrderFunction
                 return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_request", "accountId, commandType, and instrument are required.", cancellationToken);
             }
 
-            var command = new TradeOrderCommand(
-                payload.CommandType,
-                payload.Instrument,
-                payload.OrderType,
-                payload.Side,
-                payload.Volume,
-                payload.Price,
-                payload.StopLoss,
-                payload.TakeProfit,
-                payload.TimeInForce,
-                payload.PositionId,
-                payload.ClientOrderId,
-                payload.Metadata);
+            var session = await _sessionDirectory.GetAsync(payload.AccountId, cancellationToken).ConfigureAwait(false);
+            if (session is null || session.SessionId != sessionId)
+            {
+                return await request.CreateErrorResponseAsync(
+                    HttpStatusCode.BadRequest,
+                    "invalid_session",
+                    "The supplied session is not active.",
+                    cancellationToken);
+            }
 
-            await _gatewayClient.EnqueueTradeOrderAsync(
-                payload.AccountId,
-                sessionId,
-                command,
-                cancellationToken).ConfigureAwait(false);
+            var envelope = new Dictionary<string, object?>
+            {
+                ["type"] = "tradeOrder",
+                ["accountId"] = payload.AccountId,
+                ["sessionId"] = sessionId,
+                ["command"] = BuildTradeCommandPayload(payload),
+            };
+
+            await _publisher
+                .PublishAsync(_serviceBusOptions.AdminQueueName, envelope, cancellationToken)
+                .ConfigureAwait(false);
 
             var response = request.CreateResponse(HttpStatusCode.Accepted);
             return response;
@@ -101,4 +111,63 @@ public sealed class EnqueueExpertAdvisorTradeOrderFunction
         string? PositionId,
         string? ClientOrderId,
         IDictionary<string, object>? Metadata);
+
+    private static IDictionary<string, object?> BuildTradeCommandPayload(
+        EnqueueExpertAdvisorTradeOrderRequest request)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["commandType"] = request.CommandType,
+            ["instrument"] = request.Instrument,
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.OrderType))
+        {
+            payload["orderType"] = request.OrderType;
+        }
+        if (!string.IsNullOrWhiteSpace(request.Side))
+        {
+            payload["side"] = request.Side;
+        }
+        if (request.Volume.HasValue)
+        {
+            payload["volume"] = request.Volume;
+        }
+        if (request.Price.HasValue)
+        {
+            payload["price"] = request.Price;
+        }
+        if (request.StopLoss.HasValue)
+        {
+            payload["stopLoss"] = request.StopLoss;
+        }
+        if (request.TakeProfit.HasValue)
+        {
+            payload["takeProfit"] = request.TakeProfit;
+        }
+        if (!string.IsNullOrWhiteSpace(request.TimeInForce))
+        {
+            payload["timeInForce"] = request.TimeInForce;
+        }
+        if (!string.IsNullOrWhiteSpace(request.PositionId))
+        {
+            payload["positionId"] = request.PositionId;
+        }
+        if (!string.IsNullOrWhiteSpace(request.ClientOrderId))
+        {
+            payload["clientOrderId"] = request.ClientOrderId;
+        }
+        if (request.Metadata is { Count: > 0 })
+        {
+            var metadata = new Dictionary<string, object?>();
+            foreach (var pair in request.Metadata)
+            {
+                metadata[pair.Key] = pair.Value;
+            }
+
+            payload["metadata"] = metadata;
+        }
+
+        return payload;
+    }
 }
