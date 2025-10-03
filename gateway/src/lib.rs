@@ -183,7 +183,7 @@ impl AppState {
         self.inner.lock().await.idempotency.get(key).cloned()
     }
 
-    pub(crate) async fn enqueue_outbox_event(
+    pub async fn enqueue_outbox_event(
         &self,
         account: &str,
         session_id: Uuid,
@@ -239,7 +239,7 @@ impl AppState {
         })
     }
 
-    pub(crate) async fn enqueue_trade_command(
+    pub async fn enqueue_trade_command(
         &self,
         account: &str,
         session_id: Uuid,
@@ -767,7 +767,7 @@ struct ErrorBody {
 
 #[derive(Debug, Error)]
 #[error("{message}")]
-pub(crate) struct ApiError {
+pub struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
@@ -983,21 +983,21 @@ struct InboundEventRecord {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum TradeCommandType {
+pub enum TradeCommandType {
     Open,
     Close,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum TradeSide {
+pub enum TradeSide {
     Buy,
     Sell,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum TradeOrderType {
+pub enum TradeOrderType {
     Market,
     Limit,
     Stop,
@@ -1006,7 +1006,7 @@ pub(crate) enum TradeOrderType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum TradeTimeInForce {
+pub enum TradeTimeInForce {
     Gtc,
     Gtd,
     Gfd,
@@ -1016,59 +1016,59 @@ pub(crate) enum TradeTimeInForce {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TradeOrderRequest {
-    command_type: TradeCommandType,
-    instrument: String,
+pub struct TradeOrderRequest {
+    pub command_type: TradeCommandType,
+    pub instrument: String,
     #[serde(default)]
-    order_type: Option<TradeOrderType>,
+    pub order_type: Option<TradeOrderType>,
     #[serde(default)]
-    side: Option<TradeSide>,
+    pub side: Option<TradeSide>,
     #[serde(default)]
-    volume: Option<f64>,
+    pub volume: Option<f64>,
     #[serde(default)]
-    price: Option<f64>,
+    pub price: Option<f64>,
     #[serde(default)]
-    stop_loss: Option<f64>,
+    pub stop_loss: Option<f64>,
     #[serde(default)]
-    take_profit: Option<f64>,
+    pub take_profit: Option<f64>,
     #[serde(default)]
-    time_in_force: Option<TradeTimeInForce>,
+    pub time_in_force: Option<TradeTimeInForce>,
     #[serde(default)]
-    position_id: Option<String>,
+    pub position_id: Option<String>,
     #[serde(default)]
-    client_order_id: Option<String>,
+    pub client_order_id: Option<String>,
     #[serde(default)]
-    metadata: Option<Value>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TradeCommandQueued {
-    session_id: Uuid,
-    event_id: Uuid,
-    sequence: u64,
-    command_id: Uuid,
-    pending_session: bool,
-    command_type: TradeCommandType,
-    instrument: String,
+pub struct TradeCommandQueued {
+    pub session_id: Uuid,
+    pub event_id: Uuid,
+    pub sequence: u64,
+    pub command_id: Uuid,
+    pub pending_session: bool,
+    pub command_type: TradeCommandType,
+    pub instrument: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    order_type: Option<TradeOrderType>,
+    pub order_type: Option<TradeOrderType>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    side: Option<TradeSide>,
+    pub side: Option<TradeSide>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    position_id: Option<String>,
+    pub position_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    volume: Option<f64>,
+    pub volume: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OutboxEventRequest {
-    event_type: String,
+pub struct OutboxEventRequest {
+    pub event_type: String,
     #[serde(default)]
-    payload: Value,
+    pub payload: Value,
     #[serde(default = "default_requires_ack")]
-    requires_ack: bool,
+    pub requires_ack: bool,
 }
 
 const fn default_requires_ack() -> bool {
@@ -1112,10 +1112,10 @@ struct InboxResponse {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPromotionResponse {
-    session_id: Uuid,
-    status: SessionStatus,
-    pending: bool,
-    message: String,
+    pub session_id: Uuid,
+    pub status: SessionStatus,
+    pub pending: bool,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1136,7 +1136,7 @@ pub enum AdminCommandOutcome {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OutboxEnqueueResponse {
+pub struct OutboxEnqueueResponse {
     session_id: Uuid,
     event_id: Uuid,
     sequence: u64,
