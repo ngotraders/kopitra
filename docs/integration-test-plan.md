@@ -4,11 +4,11 @@ This document outlines how to orchestrate end-to-end integration tests that exer
 
 ## Automated Acceptance Harness
 
-The repository now ships with a Playwright-based acceptance suite that coordinates the gateway service, management Azure Functions, and the Service Bus emulator to exercise the four business scenarios end-to-end. The tests rely on Playwright’s APIRequestContext so every assertion is performed through the public HTTP surfaces exposed to the ops console and Expert Advisors.
+The repository now ships with a Playwright-based acceptance suite that drives the ops console UI to coordinate the gateway service, management Azure Functions, and the Service Bus emulator across the four business scenarios. Instead of calling APIs directly, the suite navigates to the **Integration → Copy Trading** workbench inside the console and performs the same actions an operator would: connecting EA sessions, approving them, composing copy groups, dispatching trades, and validating EA outbox state via the onscreen tools.
 
-- **Playwright suite** – From `tests/playwright/`, run `npm install` once and then `npx playwright test` (or `npm test`) to execute all scenarios serially. The suite provisions dedicated HTTP clients for the gateway and management APIs, approves EA sessions, manages copy-trade groups, and asserts EA outbox state for every order dispatched.
-- **Service orchestration** – Start the runtime dependencies with `docker compose up servicebus gateway management`. The Playwright suite consumes the same environment variables used by prior harnesses (`GATEWAY_BASE_URL`, `MANAGEMENT_BASE_URL`, `OPS_BEARER_TOKEN`) so the tests can target either local containers or remote deployments without modification.
-- **CI integration** – Invoke the Playwright commands above within your pipeline after bringing the services online. The generated HTML report in `tests/playwright/playwright-report/` captures request metadata, payloads, and assertion output for troubleshooting.
+- **Playwright suite** – From `tests/playwright/`, run `npm install` once and then launch the console (e.g., `npm run dev -- --host 0.0.0.0 --port 4173` in `opsconsole`) alongside the gateway and management services. With the services online, execute `npx playwright test` (or `npm test`) to run all scenarios serially.
+- **Service orchestration** – Start the runtime dependencies with `docker compose up servicebus gateway management`. Provide Playwright with the following environment variables so the browser session and the console can reach the backing services: `OPSCONSOLE_BASE_URL` (default `http://localhost:4173`), `GATEWAY_BASE_URL`, `MANAGEMENT_BASE_URL`, and `OPS_BEARER_TOKEN`.
+- **CI integration** – After bringing the services and console online within your pipeline, invoke the Playwright command above. The generated HTML report in `tests/playwright/playwright-report/` captures navigation steps, UI interactions, and request metadata for troubleshooting.
 
 The sections below remain as the high-level manual test choreography and can be used to extend the automated harness with additional checks or cross-system assertions.
 

@@ -36,6 +36,7 @@ import {
 import { NotFound } from './features/not-found/NotFound.tsx';
 import { AuthProvider } from './contexts';
 import { RequireRoles } from './routes/RequireRoles.tsx';
+import { CopyTradingWorkbench } from './features/integration/CopyTradingWorkbench.tsx';
 
 export interface AppProps {
   onSignOut?: () => void;
@@ -59,6 +60,10 @@ function App({ onSignOut }: AppProps) {
               <Route path="commands" element={<OperationsCommands />} />
               <Route path="history" element={<OperationsHistory />} />
               <Route path="performance" element={<OperationsPerformance />} />
+            </Route>
+            <Route path="integration">
+              <Route index element={<Navigate to="copy-trading" replace />} />
+              <Route path="copy-trading" element={<CopyTradingWorkbench />} />
             </Route>
             <Route path="copy-groups">
               <Route index element={<CopyGroupsList />} />
