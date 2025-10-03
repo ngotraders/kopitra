@@ -67,10 +67,7 @@ export interface CreateCopyGroupInput {
 
 export interface CopyTradingClient {
   connectExpertAdvisor(accountId: string, authenticationKey: string): Promise<ExpertAdvisorSession>;
-  approveExpertAdvisorSession(
-    session: ExpertAdvisorSession,
-    approvedBy: string,
-  ): Promise<void>;
+  approveExpertAdvisorSession(session: ExpertAdvisorSession, approvedBy: string): Promise<void>;
   clearOutbox(session: ExpertAdvisorSession): Promise<void>;
   fetchOutbox(session: ExpertAdvisorSession): Promise<OutboxEvent[]>;
   acknowledgeOutbox(session: ExpertAdvisorSession, events: OutboxEvent[]): Promise<void>;
@@ -114,7 +111,10 @@ function resolveBaseUrl(envKey: string, fallback: string): string {
   return value && value.length ? value : fallback;
 }
 
-async function computeAuthFingerprint(accountId: string, authenticationKey: string): Promise<string> {
+async function computeAuthFingerprint(
+  accountId: string,
+  authenticationKey: string,
+): Promise<string> {
   const encoder = new TextEncoder();
   const preimage = `account_session_key:${accountId}:${authenticationKey}`;
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(preimage));
@@ -342,4 +342,3 @@ export function createCopyTradingClient(): CopyTradingClient {
 export function useCopyTradingClient(): CopyTradingClient {
   return useMemo(() => createCopyTradingClient(), []);
 }
-

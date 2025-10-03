@@ -8,7 +8,12 @@ import {
   fetchSessionOutbox,
   type ExpertAdvisorSession,
 } from './expertAdvisorSessions.ts';
-import { executeCopyTradeOrder, createCopyTradeGroup, getCopyTradeGroup, upsertCopyTradeGroupMember } from './copyTradeGroups.ts';
+import {
+  executeCopyTradeOrder,
+  createCopyTradeGroup,
+  getCopyTradeGroup,
+  upsertCopyTradeGroupMember,
+} from './copyTradeGroups.ts';
 import { enqueueExpertAdvisorTradeOrder } from './enqueueExpertAdvisorTradeOrder.ts';
 import { gatewayRequest, getIntegrationConfig, managementRequest } from './config.ts';
 
@@ -193,9 +198,15 @@ describe.sequential('Ops console copy trading integration', () => {
 
   it('routes independent copy trades for separate groups', async () => {
     const leaderA = await createExpertAdvisorSession(uniqueId('acct-alpha-leader'), 'alpha-secret');
-    const followerA = await createExpertAdvisorSession(uniqueId('acct-alpha-follower'), 'alpha-follow');
+    const followerA = await createExpertAdvisorSession(
+      uniqueId('acct-alpha-follower'),
+      'alpha-follow',
+    );
     const leaderB = await createExpertAdvisorSession(uniqueId('acct-beta-leader'), 'beta-secret');
-    const followerB = await createExpertAdvisorSession(uniqueId('acct-beta-follower'), 'beta-follow');
+    const followerB = await createExpertAdvisorSession(
+      uniqueId('acct-beta-follower'),
+      'beta-follow',
+    );
 
     const sessions: ExpertAdvisorSession[] = [leaderA, followerA, leaderB, followerB];
     await Promise.all(sessions.map(clearSessionOutbox));
@@ -323,9 +334,18 @@ describe.sequential('Ops console copy trading integration', () => {
   });
 
   it('delivers copy trades to shared followers across multiple groups', async () => {
-    const leaderPrimary = await createExpertAdvisorSession(uniqueId('acct-swing-leader'), 'swing-secret');
-    const leaderSecondary = await createExpertAdvisorSession(uniqueId('acct-hedge-leader'), 'hedge-secret');
-    const followerShared = await createExpertAdvisorSession(uniqueId('acct-shared-follower'), 'shared-secret');
+    const leaderPrimary = await createExpertAdvisorSession(
+      uniqueId('acct-swing-leader'),
+      'swing-secret',
+    );
+    const leaderSecondary = await createExpertAdvisorSession(
+      uniqueId('acct-hedge-leader'),
+      'hedge-secret',
+    );
+    const followerShared = await createExpertAdvisorSession(
+      uniqueId('acct-shared-follower'),
+      'shared-secret',
+    );
 
     const sessions: ExpertAdvisorSession[] = [leaderPrimary, leaderSecondary, followerShared];
     await Promise.all(sessions.map(clearSessionOutbox));

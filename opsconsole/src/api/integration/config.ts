@@ -106,7 +106,10 @@ export async function gatewayRequest(path: string, init: RequestInit = {}) {
   return fetch(url, { ...init, headers });
 }
 
-async function parseErrorResponse(origin: 'management' | 'gateway', response: Response): Promise<never> {
+async function parseErrorResponse(
+  origin: 'management' | 'gateway',
+  response: Response,
+): Promise<never> {
   let detail: unknown = undefined;
   try {
     detail = await response.json();

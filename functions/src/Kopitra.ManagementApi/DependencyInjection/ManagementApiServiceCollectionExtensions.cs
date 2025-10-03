@@ -52,6 +52,19 @@ public static class ManagementApiServiceCollectionExtensions
         services.TryAddSingleton<AdminRequestContextFactory>();
         services.TryAddSingleton<IExpertAdvisorSessionDirectory, InMemoryExpertAdvisorSessionDirectory>();
 
+        services.TryAddSingleton<IConfiguration>(sp =>
+        {
+            var defaults = new Dictionary<string, string?>
+            {
+                ["ManagementApi:Authentication:Mode"] = "Development",
+                ["ManagementApi:ServiceBus:EmulatorBaseUrl"] = string.Empty,
+            };
+
+            return new ConfigurationBuilder()
+                .AddInMemoryCollection(defaults)
+                .Build();
+        });
+
         services.AddOptions<ManagementAuthenticationOptions>()
             .BindConfiguration("ManagementApi:Authentication", binderOptions => binderOptions.ErrorOnUnknownConfiguration = false);
 

@@ -15,7 +15,10 @@ class MockClient implements CopyTradingClient {
   private sessions = new Map<string, ExpertAdvisorSession>();
   private outboxes = new Map<string, OutboxEvent[]>();
 
-  async connectExpertAdvisor(accountId: string, _authenticationKey: string): Promise<ExpertAdvisorSession> {
+  async connectExpertAdvisor(
+    accountId: string,
+    _authenticationKey: string,
+  ): Promise<ExpertAdvisorSession> {
     const session: ExpertAdvisorSession = {
       accountId,
       sessionId: `${accountId}-session`,
@@ -77,4 +80,3 @@ export const Default: Story = {
     await expect(canvas.getByTestId('session-row-demo-account')).toBeVisible();
   },
 };
-

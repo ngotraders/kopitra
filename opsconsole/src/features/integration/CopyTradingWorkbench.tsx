@@ -135,7 +135,10 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
     event.preventDefault();
     try {
       setGlobalStatus(`Connecting ${connectForm.accountId}…`);
-      const session = await client.connectExpertAdvisor(connectForm.accountId.trim(), connectForm.authKey.trim());
+      const session = await client.connectExpertAdvisor(
+        connectForm.accountId.trim(),
+        connectForm.authKey.trim(),
+      );
       setSessions((current) => [
         ...current.filter((existing) => existing.accountId !== session.accountId),
         { ...session, approved: false, busy: false, lastOutbox: [] },
@@ -154,7 +157,11 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
   };
 
   const handleApprove = async (session: SessionState) => {
-    updateSession(session.accountId, (current) => ({ ...current, busy: true, status: 'Approving…' }));
+    updateSession(session.accountId, (current) => ({
+      ...current,
+      busy: true,
+      status: 'Approving…',
+    }));
     try {
       await client.approveExpertAdvisorSession(session, approvalActor);
       updateSession(session.accountId, (current) => ({
@@ -173,7 +180,11 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
   };
 
   const handleClearOutbox = async (session: SessionState) => {
-    updateSession(session.accountId, (current) => ({ ...current, busy: true, status: 'Clearing outbox…' }));
+    updateSession(session.accountId, (current) => ({
+      ...current,
+      busy: true,
+      status: 'Clearing outbox…',
+    }));
     try {
       await client.clearOutbox(session);
       updateSession(session.accountId, (current) => ({
@@ -192,7 +203,11 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
   };
 
   const handleFetchOutbox = async (session: SessionState) => {
-    updateSession(session.accountId, (current) => ({ ...current, busy: true, status: 'Fetching outbox…' }));
+    updateSession(session.accountId, (current) => ({
+      ...current,
+      busy: true,
+      status: 'Fetching outbox…',
+    }));
     try {
       const events = await client.fetchOutbox(session);
       updateSession(session.accountId, (current) => ({
@@ -211,7 +226,11 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
   };
 
   const handleAckOutbox = async (session: SessionState) => {
-    updateSession(session.accountId, (current) => ({ ...current, busy: true, status: 'Acknowledging events…' }));
+    updateSession(session.accountId, (current) => ({
+      ...current,
+      busy: true,
+      status: 'Acknowledging events…',
+    }));
     try {
       await client.acknowledgeOutbox(session, session.lastOutbox);
       updateSession(session.accountId, (current) => ({
@@ -366,24 +385,34 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
       <header>
         <h1>Copy trading integration workbench</h1>
         <p>
-          Connect expert advisors, approve sessions, orchestrate copy trades, and inspect outbox events
-          using live services.
+          Connect expert advisors, approve sessions, orchestrate copy trades, and inspect outbox
+          events using live services.
         </p>
-        <p aria-live="polite" data-testid="workbench-status" className="copy-trading-workbench__status">
+        <p
+          aria-live="polite"
+          data-testid="workbench-status"
+          className="copy-trading-workbench__status"
+        >
           {globalStatus}
         </p>
       </header>
 
       <section aria-label="Connect expert advisors" className="copy-trading-workbench__section">
         <h2>1. Connect expert advisors</h2>
-        <form className="copy-trading-workbench__form" onSubmit={handleConnect} data-testid="connect-form">
+        <form
+          className="copy-trading-workbench__form"
+          onSubmit={handleConnect}
+          data-testid="connect-form"
+        >
           <label>
             <span>Account ID</span>
             <input
               data-testid="connect-account"
               type="text"
               value={connectForm.accountId}
-              onChange={(event) => setConnectForm((current) => ({ ...current, accountId: event.target.value }))}
+              onChange={(event) =>
+                setConnectForm((current) => ({ ...current, accountId: event.target.value }))
+              }
               required
             />
           </label>
@@ -393,7 +422,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="connect-auth"
               type="text"
               value={connectForm.authKey}
-              onChange={(event) => setConnectForm((current) => ({ ...current, authKey: event.target.value }))}
+              onChange={(event) =>
+                setConnectForm((current) => ({ ...current, authKey: event.target.value }))
+              }
               required
             />
           </label>
@@ -493,7 +524,11 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
 
       <section aria-label="Direct trade orders" className="copy-trading-workbench__section">
         <h2>3. Direct trade orders</h2>
-        <form className="copy-trading-workbench__form" onSubmit={handleTradeSubmit} data-testid="trade-form">
+        <form
+          className="copy-trading-workbench__form"
+          onSubmit={handleTradeSubmit}
+          data-testid="trade-form"
+        >
           <label>
             <span>Session</span>
             <select
@@ -519,7 +554,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="trade-command-type"
               value={tradeForm.commandType}
-              onChange={(event) => setTradeForm((current) => ({ ...current, commandType: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, commandType: event.target.value }))
+              }
             >
               <option value="open">open</option>
               <option value="close">close</option>
@@ -531,7 +568,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="trade-instrument"
               type="text"
               value={tradeForm.instrument}
-              onChange={(event) => setTradeForm((current) => ({ ...current, instrument: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, instrument: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -539,7 +578,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="trade-order-type"
               value={tradeForm.orderType}
-              onChange={(event) => setTradeForm((current) => ({ ...current, orderType: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, orderType: event.target.value }))
+              }
             >
               <option value="market">market</option>
               <option value="limit">limit</option>
@@ -550,7 +591,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="trade-side"
               value={tradeForm.side}
-              onChange={(event) => setTradeForm((current) => ({ ...current, side: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, side: event.target.value }))
+              }
             >
               <option value="buy">buy</option>
               <option value="sell">sell</option>
@@ -563,7 +606,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.01"
               value={tradeForm.volume}
-              onChange={(event) => setTradeForm((current) => ({ ...current, volume: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, volume: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -572,7 +617,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="trade-tif"
               type="text"
               value={tradeForm.timeInForce}
-              onChange={(event) => setTradeForm((current) => ({ ...current, timeInForce: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, timeInForce: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -581,7 +628,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="trade-client-order"
               type="text"
               value={tradeForm.clientOrderId}
-              onChange={(event) => setTradeForm((current) => ({ ...current, clientOrderId: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, clientOrderId: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -591,7 +640,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.0001"
               value={tradeForm.stopLoss}
-              onChange={(event) => setTradeForm((current) => ({ ...current, stopLoss: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, stopLoss: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -601,7 +652,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.0001"
               value={tradeForm.takeProfit}
-              onChange={(event) => setTradeForm((current) => ({ ...current, takeProfit: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, takeProfit: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -610,7 +663,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="trade-position-id"
               type="text"
               value={tradeForm.positionId}
-              onChange={(event) => setTradeForm((current) => ({ ...current, positionId: event.target.value }))}
+              onChange={(event) =>
+                setTradeForm((current) => ({ ...current, positionId: event.target.value }))
+              }
             />
           </label>
           <button type="submit" data-testid="trade-submit">
@@ -621,14 +676,20 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
 
       <section aria-label="Copy group management" className="copy-trading-workbench__section">
         <h2>4. Copy group management</h2>
-        <form className="copy-trading-workbench__form" onSubmit={handleCreateGroup} data-testid="group-form">
+        <form
+          className="copy-trading-workbench__form"
+          onSubmit={handleCreateGroup}
+          data-testid="group-form"
+        >
           <label>
             <span>Group ID</span>
             <input
               data-testid="group-id"
               type="text"
               value={groupForm.groupId}
-              onChange={(event) => setGroupForm((current) => ({ ...current, groupId: event.target.value }))}
+              onChange={(event) =>
+                setGroupForm((current) => ({ ...current, groupId: event.target.value }))
+              }
               required
             />
           </label>
@@ -638,7 +699,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="group-name"
               type="text"
               value={groupForm.name}
-              onChange={(event) => setGroupForm((current) => ({ ...current, name: event.target.value }))}
+              onChange={(event) =>
+                setGroupForm((current) => ({ ...current, name: event.target.value }))
+              }
               required
             />
           </label>
@@ -648,7 +711,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="group-requested-by"
               type="text"
               value={groupForm.requestedBy}
-              onChange={(event) => setGroupForm((current) => ({ ...current, requestedBy: event.target.value }))}
+              onChange={(event) =>
+                setGroupForm((current) => ({ ...current, requestedBy: event.target.value }))
+              }
             />
           </label>
           <button type="submit" data-testid="group-submit">
@@ -656,13 +721,19 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
           </button>
         </form>
 
-        <form className="copy-trading-workbench__form" onSubmit={handleAddMember} data-testid="member-form">
+        <form
+          className="copy-trading-workbench__form"
+          onSubmit={handleAddMember}
+          data-testid="member-form"
+        >
           <label>
             <span>Group</span>
             <select
               data-testid="member-group"
               value={memberForm.groupId}
-              onChange={(event) => setMemberForm((current) => ({ ...current, groupId: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, groupId: event.target.value }))
+              }
               required
             >
               <option value="" disabled>
@@ -680,7 +751,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="member-account"
               value={memberForm.accountId}
-              onChange={(event) => setMemberForm((current) => ({ ...current, accountId: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, accountId: event.target.value }))
+              }
               required
             >
               <option value="" disabled>
@@ -698,7 +771,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="member-role"
               value={memberForm.role}
-              onChange={(event) => setMemberForm((current) => ({ ...current, role: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, role: event.target.value }))
+              }
             >
               <option value="leader">leader</option>
               <option value="follower">follower</option>
@@ -710,7 +785,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="member-risk"
               type="text"
               value={memberForm.riskStrategy}
-              onChange={(event) => setMemberForm((current) => ({ ...current, riskStrategy: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, riskStrategy: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -720,7 +797,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.1"
               value={memberForm.allocation}
-              onChange={(event) => setMemberForm((current) => ({ ...current, allocation: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, allocation: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -729,7 +808,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="member-requested-by"
               type="text"
               value={memberForm.requestedBy}
-              onChange={(event) => setMemberForm((current) => ({ ...current, requestedBy: event.target.value }))}
+              onChange={(event) =>
+                setMemberForm((current) => ({ ...current, requestedBy: event.target.value }))
+              }
             />
           </label>
           <button type="submit" data-testid="member-submit">
@@ -756,13 +837,19 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
 
       <section aria-label="Execute copy trades" className="copy-trading-workbench__section">
         <h2>5. Execute copy trades</h2>
-        <form className="copy-trading-workbench__form" onSubmit={handleExecuteCopyTrade} data-testid="copy-trade-form">
+        <form
+          className="copy-trading-workbench__form"
+          onSubmit={handleExecuteCopyTrade}
+          data-testid="copy-trade-form"
+        >
           <label>
             <span>Group</span>
             <select
               data-testid="copy-group"
               value={copyTradeForm.groupId}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, groupId: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, groupId: event.target.value }))
+              }
               required
             >
               <option value="" disabled>
@@ -780,7 +867,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="copy-source"
               value={copyTradeForm.sourceAccount}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, sourceAccount: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, sourceAccount: event.target.value }))
+              }
               required
             >
               <option value="" disabled>
@@ -799,7 +888,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="copy-initiated-by"
               type="text"
               value={copyTradeForm.initiatedBy}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, initiatedBy: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, initiatedBy: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -807,7 +898,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="copy-command-type"
               value={copyTradeForm.commandType}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, commandType: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, commandType: event.target.value }))
+              }
             >
               <option value="open">open</option>
               <option value="close">close</option>
@@ -819,7 +912,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="copy-instrument"
               type="text"
               value={copyTradeForm.instrument}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, instrument: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, instrument: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -827,7 +922,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="copy-order-type"
               value={copyTradeForm.orderType}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, orderType: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, orderType: event.target.value }))
+              }
             >
               <option value="market">market</option>
               <option value="limit">limit</option>
@@ -838,7 +935,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
             <select
               data-testid="copy-side"
               value={copyTradeForm.side}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, side: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, side: event.target.value }))
+              }
             >
               <option value="buy">buy</option>
               <option value="sell">sell</option>
@@ -851,7 +950,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.01"
               value={copyTradeForm.volume}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, volume: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, volume: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -860,7 +961,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="copy-tif"
               type="text"
               value={copyTradeForm.timeInForce}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, timeInForce: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, timeInForce: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -869,7 +972,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="copy-client-order"
               type="text"
               value={copyTradeForm.clientOrderId}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, clientOrderId: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, clientOrderId: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -879,7 +984,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.0001"
               value={copyTradeForm.stopLoss}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, stopLoss: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, stopLoss: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -889,7 +996,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               type="number"
               step="0.0001"
               value={copyTradeForm.takeProfit}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, takeProfit: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, takeProfit: event.target.value }))
+              }
             />
           </label>
           <label>
@@ -898,7 +1007,9 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
               data-testid="copy-position-id"
               type="text"
               value={copyTradeForm.positionId}
-              onChange={(event) => setCopyTradeForm((current) => ({ ...current, positionId: event.target.value }))}
+              onChange={(event) =>
+                setCopyTradeForm((current) => ({ ...current, positionId: event.target.value }))
+              }
             />
           </label>
           <button type="submit" data-testid="copy-submit">
@@ -911,4 +1022,3 @@ export function CopyTradingWorkbench({ client = defaultClient }: CopyTradingWork
 }
 
 export default CopyTradingWorkbench;
-

@@ -86,9 +86,7 @@ export interface ExecuteCopyTradeOrderInput {
   command: TradeCommand;
 }
 
-export async function executeCopyTradeOrder(
-  input: ExecuteCopyTradeOrderInput,
-): Promise<void> {
+export async function executeCopyTradeOrder(input: ExecuteCopyTradeOrderInput): Promise<void> {
   const body: Record<string, unknown> = {
     sourceAccount: input.sourceAccount,
     commandType: input.command.commandType,
