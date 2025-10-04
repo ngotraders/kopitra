@@ -12,6 +12,16 @@ param environment string
 @description('Azure region for the deployment. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
+@description('Azure region for the Static Web App. Must be one of the platform-supported regions.')
+@allowed([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+])
+param staticWebAppLocation string = 'eastasia'
+
 @description('Short workload identifier used for naming and tagging.')
 param workloadName string = 'kopitra'
 
@@ -42,6 +52,9 @@ param gatewayImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworl
 
 @description('Set to true to provision the Cosmos DB account and container.')
 param deployCosmos bool = false
+
+@description('Set to false when the deploying principal lacks permission to create role assignments.')
+param deployRoleAssignments bool = true
 
 var tags = {
   application: workloadName
@@ -286,7 +299,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
 
 resource staticWebApp 'Microsoft.Web/staticSites@2022-03-01' = {
   name: staticWebAppName
-  location: location
+  location: staticWebAppLocation
   sku: {
     name: 'Free'
     tier: 'Free'
@@ -308,7 +321,7 @@ resource sqlFirewallRule 'Microsoft.Sql/servers/firewallRules@2022-02-01-preview
   }
 }
 
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
   name: guid(subscription().id, containerRegistryName, gatewayAppName, 'acr-pull')
   scope: containerRegistry
   properties: {
@@ -318,7 +331,7 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
   name: guid(subscription().id, serviceBusNamespaceName, gatewayAppName, 'sb-sender')
   scope: serviceBusNamespace
   dependsOn: [
@@ -331,7 +344,7 @@ resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@202
   }
 }
 
-resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
   name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-receiver')
   scope: serviceBusNamespace
   dependsOn: [
@@ -344,7 +357,7 @@ resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
-resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
   name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-sender-func')
   scope: serviceBusNamespace
   dependsOn: [
@@ -357,7 +370,7 @@ resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssign
   }
 }
 
-module keyVaultRoleAssignments 'bicep/keyvault-assignments.bicep' = {
+module keyVaultRoleAssignments 'bicep/keyvault-assignments.bicep' = if (deployRoleAssignments) {
   name: 'keyVaultRoleAssignments'
   params: {
     keyVaultName: keyVaultName
