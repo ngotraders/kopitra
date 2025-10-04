@@ -226,8 +226,6 @@ var storageAccountKeys = storageAccount.listKeys()
 var storageAccountKey = storageAccountKeys.keys[0].value
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccountKey};EndpointSuffix=${az.environment().suffixes.storage}'
 var sqlServerHostSuffix = az.environment().suffixes.sqlServerHostname
-var keyVaultDnsSuffix = az.environment().suffixes.keyvaultDns
-var keyVaultUri = 'https://${keyVaultName}.${keyVaultDnsSuffix}/'
 
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
