@@ -117,7 +117,7 @@ module containerAppModule 'bicep/containerapps.bicep' = {
       }
       {
         name: 'KEY_VAULT_URI'
-        value: 'https://${keyVaultName}.${az.environment().suffixes.keyVaultDns}/'
+        value: 'https://${keyVaultName}.${az.environment().suffixes.keyvaultDns}/'
       }
     ]
     registryServer: containerRegistry.properties.loginServer
@@ -217,7 +217,7 @@ var storageAccountKeys = storageAccount.listKeys()
 var storageAccountKey = storageAccountKeys.keys[0].value
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccountKey};EndpointSuffix=${az.environment().suffixes.storage}'
 var sqlServerHostSuffix = az.environment().suffixes.sqlServerHostname
-var keyVaultDnsSuffix = az.environment().suffixes.keyVaultDns
+var keyVaultDnsSuffix = az.environment().suffixes.keyvaultDns
 var keyVaultUri = 'https://${keyVaultName}.${keyVaultDnsSuffix}/'
 
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
@@ -313,7 +313,7 @@ resource sqlFirewallRule 'Microsoft.Sql/servers/firewallRules@2022-02-01-preview
 }
 
 resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, containerAppModule.outputs.containerAppPrincipalId, 'AcrPull')
+  name: guid(subscription().id, containerRegistryName, gatewayAppName, 'acr-pull')
   scope: containerRegistry
   properties: {
     principalId: containerAppModule.outputs.containerAppPrincipalId
