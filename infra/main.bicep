@@ -76,7 +76,6 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-pr
   location: location
   sku: {
     name: 'Basic'
-    tier: 'Basic'
   }
   tags: tags
   properties: {
@@ -91,7 +90,6 @@ module containerAppModule 'bicep/containerapps.bicep' = {
     location: location
     tags: tags
     workloadName: workloadName
-    environment: environment
     logAnalyticsName: logAnalyticsName
     managedEnvironmentName: managedEnvironmentName
     containerAppName: gatewayAppName
@@ -111,7 +109,7 @@ module containerAppModule 'bicep/containerapps.bicep' = {
       }
       {
         name: 'SQL_SERVER_FQDN'
-        value: '${sqlServerName}.database.windows.net'
+        value: '${sqlServerName}.${az.environment().suffixes.sqlServerHostname}'
       }
       {
         name: 'SQL_DATABASE_NAME'
@@ -119,7 +117,7 @@ module containerAppModule 'bicep/containerapps.bicep' = {
       }
       {
         name: 'KEY_VAULT_URI'
-        value: 'https://${keyVaultName}.vault.azure.net/'
+        value: 'https://${keyVaultName}.${az.environment().suffixes.keyvaultDns}/'
       }
     ]
     registryServer: containerRegistry.properties.loginServer
@@ -132,7 +130,6 @@ module serviceBusModule 'bicep/servicebus.bicep' = {
     namespaceName: serviceBusNamespaceName
     location: location
     tags: tags
-    environment: environment
     operationsQueueName: operationsQueueName
     commandsQueueName: commandsQueueName
   }
@@ -160,14 +157,20 @@ module keyVaultModule 'bicep/keyvault.bicep' = {
   }
 }
 
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
+  name: serviceBusNamespaceName
+}
+
+resource keyVaultResource 'Microsoft.KeyVault/vaults@2023-02-01' existing = {
+  name: keyVaultName
+}
+
 module cosmosModule 'bicep/cosmosdb.bicep' = if (deployCosmos) {
   name: 'cosmosDb'
   params: {
     accountName: cosmosAccountName
     location: location
     tags: tags
-    workloadName: workloadName
-    environment: environment
     databaseName: cosmosDatabaseName
     containerName: cosmosContainerName
   }
@@ -210,9 +213,12 @@ resource functionPlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   tags: tags
 }
 
-var storageAccountKeys = listKeys(storageAccount.id, '2022-09-01')
+var storageAccountKeys = storageAccount.listKeys()
 var storageAccountKey = storageAccountKeys.keys[0].value
-var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccountKey};EndpointSuffix=${environment().suffixes.storage}'
+var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccountKey};EndpointSuffix=${az.environment().suffixes.storage}'
+var sqlServerHostSuffix = az.environment().suffixes.sqlServerHostname
+var keyVaultDnsSuffix = az.environment().suffixes.keyvaultDns
+var keyVaultUri = 'https://${keyVaultName}.${keyVaultDnsSuffix}/'
 
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
@@ -267,7 +273,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'SQL_SERVER_FQDN'
-          value: '${sqlServerName}.database.windows.net'
+          value: '${sqlServerName}.${sqlServerHostSuffix}'
         }
         {
           name: 'SQL_DATABASE_NAME'
@@ -275,7 +281,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'KEY_VAULT_URI'
-          value: 'https://${keyVaultName}.vault.azure.net/'
+          value: keyVaultUri
         }
       ]
     }
@@ -307,7 +313,7 @@ resource sqlFirewallRule 'Microsoft.Sql/servers/firewallRules@2022-02-01-preview
 }
 
 resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, containerAppModule.outputs.containerAppPrincipalId, 'AcrPull')
+  name: guid(subscription().id, containerRegistryName, gatewayAppName, 'acr-pull')
   scope: containerRegistry
   properties: {
     principalId: containerAppModule.outputs.containerAppPrincipalId
@@ -317,8 +323,8 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 }
 
 resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusModule.outputs.namespaceId, containerAppModule.outputs.containerAppPrincipalId, 'sb-sender')
-  scope: resourceId('Microsoft.ServiceBus/namespaces', serviceBusNamespaceName)
+  name: guid(subscription().id, serviceBusNamespaceName, gatewayAppName, 'sb-sender')
+  scope: serviceBusNamespace
   properties: {
     principalId: containerAppModule.outputs.containerAppPrincipalId
     principalType: 'ServicePrincipal'
@@ -327,8 +333,8 @@ resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@202
 }
 
 resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusModule.outputs.namespaceId, functionApp.identity.principalId, 'sb-receiver')
-  scope: resourceId('Microsoft.ServiceBus/namespaces', serviceBusNamespaceName)
+  name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-receiver')
+  scope: serviceBusNamespace
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
@@ -337,8 +343,8 @@ resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2
 }
 
 resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusModule.outputs.namespaceId, functionApp.identity.principalId, 'sb-sender-func')
-  scope: resourceId('Microsoft.ServiceBus/namespaces', serviceBusNamespaceName)
+  name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-sender-func')
+  scope: serviceBusNamespace
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
@@ -347,8 +353,8 @@ resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssign
 }
 
 resource keyVaultContainerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVaultModule.outputs.vaultId, containerAppModule.outputs.containerAppPrincipalId, 'kv-reader')
-  scope: resourceId('Microsoft.KeyVault/vaults', keyVaultName)
+  name: guid(subscription().id, keyVaultName, gatewayAppName, 'kv-reader')
+  scope: keyVaultResource
   properties: {
     principalId: containerAppModule.outputs.containerAppPrincipalId
     principalType: 'ServicePrincipal'
@@ -357,8 +363,8 @@ resource keyVaultContainerAssignment 'Microsoft.Authorization/roleAssignments@20
 }
 
 resource keyVaultFunctionAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVaultModule.outputs.vaultId, functionApp.identity.principalId, 'kv-reader-func')
-  scope: resourceId('Microsoft.KeyVault/vaults', keyVaultName)
+  name: guid(subscription().id, keyVaultName, functionAppName, 'kv-reader-func')
+  scope: keyVaultResource
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
@@ -373,9 +379,9 @@ output containerRegistryLoginServer string = '${containerRegistry.name}.azurecr.
 output serviceBusNamespace string = '${serviceBusNamespaceName}.servicebus.windows.net'
 output operationsQueue string = operationsQueueName
 output commandsQueue string = commandsQueueName
-output sqlServerFqdn string = '${sqlServerName}.database.windows.net'
+output sqlServerFqdn string = '${sqlServerName}.${sqlServerHostSuffix}'
 output sqlDatabaseName string = sqlDatabaseName
 output functionAppName string = functionAppName
 output staticWebAppName string = staticWebAppName
-output keyVaultUri string = 'https://${keyVaultName}.vault.azure.net/'
+output keyVaultUri string = keyVaultUri
 output cosmosAccountName string = deployCosmos ? cosmosAccountName : ''

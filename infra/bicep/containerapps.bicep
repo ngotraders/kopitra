@@ -10,9 +10,6 @@ param tags object
 @description('Short workload identifier used for naming child resources and diagnostics.')
 param workloadName string
 
-@description('Target environment suffix.')
-param environment string
-
 @description('Name assigned to the Log Analytics workspace that backs the Container Apps environment.')
 param logAnalyticsName string
 
@@ -34,8 +31,8 @@ param registryServer string
 @description('Target ingress port exposed by the application.')
 param targetPort int = 8080
 
-@description('CPU cores allocated to the container.')
-param cpu double = 0.25
+@description('CPU cores allocated to the container. Provide the value as a string that can be parsed as JSON (e.g. "0.25").')
+param cpu string = '0.25'
 
 @description('Memory allocated to the container.')
 param memory string = '0.5Gi'
@@ -69,6 +66,8 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
   }
 }
 
+var cpuValue = json(cpu)
+
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: containerAppName
   location: location
@@ -97,7 +96,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           image: containerImage
           env: containerEnvVars
           resources: {
-            cpu: cpu
+            cpu: cpuValue
             memory: memory
           }
         }
