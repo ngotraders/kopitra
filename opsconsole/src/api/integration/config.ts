@@ -37,7 +37,7 @@ export function getIntegrationConfig(): OpsIntegrationConfig {
 
   if (!managementBaseUrl) {
     throw new Error(
-      'Management base URL is not configured. Set OPS_MANAGEMENT_BASE_URL or MANAGEMENT_BASE_URL.',
+      'Management base URL is not configured. Set OPS_MANAGEMENT_BASE_URL, MANAGEMENT_BASE_URL, or AZURE_FUNCTIONS_URL.',
     );
   }
 
@@ -145,6 +145,8 @@ function resolveIntegrationConfig(
       globals.__OPS_MANAGEMENT_BASE_URL__ ??
       env.MANAGEMENT_BASE_URL ??
       env.OPS_MANAGEMENT_BASE_URL ??
+      env.AZURE_FUNCTIONS_URL ??
+      env.VITE_AZURE_FUNCTIONS_URL ??
       env.VITE_MANAGEMENT_BASE_URL,
     gatewayBaseUrl:
       globals.__OPS_GATEWAY_BASE_URL__ ?? env.GATEWAY_BASE_URL ?? env.OPS_GATEWAY_BASE_URL,

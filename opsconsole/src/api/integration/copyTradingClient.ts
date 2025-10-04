@@ -167,7 +167,10 @@ function toExecutionBody(input: CopyTradeExecutionInput): Record<string, unknown
 
 export function createCopyTradingClient(): CopyTradingClient {
   const gatewayBaseUrl = resolveBaseUrl('VITE_GATEWAY_BASE_URL', 'http://localhost:8080');
-  const managementBaseUrl = resolveBaseUrl('VITE_MANAGEMENT_BASE_URL', 'http://localhost:7071/api');
+  const managementBaseUrl = resolveBaseUrl(
+    'VITE_AZURE_FUNCTIONS_URL',
+    resolveBaseUrl('VITE_MANAGEMENT_BASE_URL', 'http://localhost:7071/api'),
+  );
   const opsBearerToken = resolveBaseUrl('VITE_OPS_BEARER_TOKEN', 'dev-token');
 
   async function gatewayRequest(path: string, init: RequestInit = {}): Promise<Response> {
