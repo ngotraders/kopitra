@@ -8,6 +8,7 @@ vars:
   DOTNET: '{{.DOTNET | default "dotnet"}}'
   NPM: '{{.NPM | default "npm"}}'
   RUST_LOG: '{{.RUST_LOG | default "info"}}'
+  TASK_BIN: '{{.TASK_BIN | default "task"}}'
 
 tasks:
   default:
@@ -17,19 +18,13 @@ tasks:
 
   dev:
     desc: Start the local stack for integration testing without Docker.
-    deps:
-      - servicebus:run
-      - gateway:run
-      - functions:start
-      - opsconsole:dev
+    cmds:
+      - '{{.TASK_BIN}} --parallel servicebus:run gateway:run functions:start opsconsole:dev'
 
   verify:
     desc: Run all module test suites in parallel.
-    deps:
-      - servicebus:test
-      - gateway:test
-      - functions:test
-      - opsconsole:test
+    cmds:
+      - '{{.TASK_BIN}} --parallel servicebus:test gateway:test functions:test opsconsole:test'
 
   servicebus:run:
     dir: servicebus-emulator
