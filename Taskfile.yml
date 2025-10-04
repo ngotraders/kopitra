@@ -1,0 +1,113 @@
+version: '3'
+
+description: >
+  Developer task runners for running Kopitra services and tests without Docker.
+
+vars:
+  CARGO: '{{.CARGO | default "cargo"}}'
+  DOTNET: '{{.DOTNET | default "dotnet"}}'
+  NPM: '{{.NPM | default "npm"}}'
+  RUST_LOG: '{{.RUST_LOG | default "info"}}'
+  TASK_BIN: '{{.TASK_BIN | default "task"}}'
+
+tasks:
+  default:
+    desc: Alias for `task dev`.
+    cmds:
+      - task: dev
+
+  dev:
+    desc: Start the local stack for integration testing without Docker.
+    cmds:
+      - '{{.TASK_BIN}} --parallel servicebus:run gateway:run functions:start opsconsole:dev'
+
+  verify:
+    desc: Run all module test suites in parallel.
+    cmds:
+      - '{{.TASK_BIN}} --parallel servicebus:test gateway:test functions:test opsconsole:test'
+
+  servicebus:run:
+    dir: servicebus-emulator
+    desc: Run the Service Bus emulator locally.
+    env:
+      RUST_LOG: '{{.RUST_LOG}}'
+    cmds:
+      - '{{.CARGO}} run'
+
+  servicebus:test:
+    dir: servicebus-emulator
+    desc: Run the Service Bus emulator unit tests.
+    env:
+      RUST_LOG: '{{.RUST_LOG}}'
+    cmds:
+      - '{{.CARGO}} test'
+
+  gateway:run:
+    dir: gateway
+    desc: Run the Trade Agent gateway locally.
+    env:
+      RUST_LOG: '{{.RUST_LOG}}'
+      EA_SERVICE_BUS_EMULATOR_BASE_URL: '{{.EA_SERVICE_BUS_EMULATOR_BASE_URL | default "http://localhost:7075/"}}'
+      EA_SERVICE_BUS_QUEUE: '{{.EA_SERVICE_BUS_QUEUE | default "ea-admin"}}'
+      EA_SERVICE_BUS_NAMESPACE: '{{.EA_SERVICE_BUS_NAMESPACE | default "emulator"}}'
+      EA_SERVICE_BUS_POLICY: '{{.EA_SERVICE_BUS_POLICY | default "emulator"}}'
+      EA_SERVICE_BUS_KEY: '{{.EA_SERVICE_BUS_KEY | default "emulator"}}'
+    cmds:
+      - '{{.CARGO}} run'
+
+  gateway:test:
+    dir: gateway
+    desc: Run the Rust gateway test suite.
+    env:
+      RUST_LOG: '{{.RUST_LOG}}'
+    cmds:
+      - '{{.CARGO}} fmt --check'
+      - '{{.CARGO}} test'
+
+  functions:start:
+    dir: functions
+    desc: Start the Azure Functions management API locally.
+    cmds:
+      - '{{.DOTNET}} build Functions.sln'
+      - '{{.DOTNET}} run --project src/Kopitra.ManagementApi/Kopitra.ManagementApi.csproj'
+
+  functions:test:
+    dir: functions
+    desc: Run the management API unit tests.
+    cmds:
+      - '{{.DOTNET}} test Functions.sln'
+
+  opsconsole:install:
+    dir: opsconsole
+    internal: true
+    status:
+      - test -f node_modules/.task-install.stamp
+      - test node_modules/.task-install.stamp -nt package.json
+      - test node_modules/.task-install.stamp -nt package-lock.json
+    cmds:
+      - '{{.NPM}} install'
+      - touch node_modules/.task-install.stamp
+
+  opsconsole:dev:
+    dir: opsconsole
+    desc: Start the Ops Console frontend in development mode.
+    deps:
+      - opsconsole:install
+    cmds:
+      - '{{.NPM}} run dev -- --host 0.0.0.0'
+
+  opsconsole:test:
+    dir: opsconsole
+    desc: Run the Ops Console Vitest suite.
+    deps:
+      - opsconsole:install
+    cmds:
+      - '{{.NPM}} test'
+
+  opsconsole:lint:
+    dir: opsconsole
+    desc: Run the Ops Console ESLint checks.
+    deps:
+      - opsconsole:install
+    cmds:
+      - '{{.NPM}} run lint'
