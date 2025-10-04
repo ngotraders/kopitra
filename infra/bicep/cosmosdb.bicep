@@ -10,12 +10,6 @@ param accountName string
 @description('Tag dictionary applied to all Cosmos resources.')
 param tags object
 
-@description('Short workload identifier used for default resource names.')
-param workloadName string
-
-@description('Environment suffix appended to child resources.')
-param environment string
-
 @description('SQL API database name.')
 param databaseName string
 
@@ -56,7 +50,8 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
 }
 
 resource sqlDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' = {
-  name: '${cosmosAccount.name}/${databaseName}'
+  name: databaseName
+  parent: cosmosAccount
   tags: tags
   properties: {
     resource: {
@@ -67,7 +62,8 @@ resource sqlDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04
 }
 
 resource sqlContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
-  name: '${cosmosAccount.name}/${databaseName}/${containerName}'
+  name: containerName
+  parent: sqlDatabase
   tags: tags
   properties: {
     resource: {

@@ -34,7 +34,8 @@ resource sqlServer 'Microsoft.Sql/servers@2022-02-01-preview' = {
 }
 
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-02-01-preview' = {
-  name: '${sqlServer.name}/${databaseName}'
+  name: databaseName
+  parent: sqlServer
   location: location
   tags: tags
   sku: {
