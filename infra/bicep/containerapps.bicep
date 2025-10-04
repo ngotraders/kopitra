@@ -42,7 +42,10 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   location: location
   tags: tags
   properties: {
-    retentionInDays: 7
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
