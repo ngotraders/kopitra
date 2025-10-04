@@ -28,6 +28,9 @@
     },
     "gatewayImage": {
       "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+    },
+    "deployRoleAssignments": {
+      "value": false
     }
   }
 }
