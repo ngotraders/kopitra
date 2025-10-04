@@ -19,6 +19,9 @@ param managedEnvironmentName string
 @description('Container App resource name.')
 param containerAppName string
 
+@description('Environment suffix used for naming ancillary resources (e.g., dev, stg, prod).')
+param environment string
+
 @description('Initial container image reference (e.g., registry.azurecr.io/image:tag).')
 param containerImage string
 
@@ -70,13 +73,23 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
 }
 
 var cpuValue = json(cpu)
+var registryIdentityName = '${workloadName}-acr-id-${environment}'
+
+resource registryIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: registryIdentityName
+  location: location
+  tags: tags
+}
 
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: containerAppName
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned,UserAssigned'
+    userAssignedIdentities: {
+      '${registryIdentity.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: managedEnvironment.id
@@ -88,7 +101,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       registries: [
         {
           server: registryServer
-          identity: 'SystemAssigned'
+          identity: registryIdentity.id
         }
       ]
     }
@@ -115,3 +128,4 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
 output containerAppPrincipalId string = containerApp.identity.principalId
 output managedEnvironmentId string = managedEnvironment.id
 output containerAppId string = containerApp.id
+output registryIdentityPrincipalId string = registryIdentity.properties.principalId

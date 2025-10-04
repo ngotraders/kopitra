@@ -103,6 +103,7 @@ module containerAppModule 'bicep/containerapps.bicep' = {
     location: location
     tags: tags
     workloadName: workloadName
+    environment: environment
     logAnalyticsName: logAnalyticsName
     managedEnvironmentName: managedEnvironmentName
     containerAppName: gatewayAppName
@@ -323,7 +324,7 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   name: guid(subscription().id, containerRegistryName, gatewayAppName, 'acr-pull')
   scope: containerRegistry
   properties: {
-    principalId: containerAppModule.outputs.containerAppPrincipalId
+    principalId: containerAppModule.outputs.registryIdentityPrincipalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   }
