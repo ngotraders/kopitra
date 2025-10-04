@@ -12,6 +12,16 @@ param environment string
 @description('Azure region for the deployment. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
+@description('Azure region for the Static Web App. Must be one of the platform-supported regions.')
+@allowed([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+])
+param staticWebAppLocation string = 'eastasia'
+
 @description('Short workload identifier used for naming and tagging.')
 param workloadName string = 'kopitra'
 
@@ -286,7 +296,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
 
 resource staticWebApp 'Microsoft.Web/staticSites@2022-03-01' = {
   name: staticWebAppName
-  location: location
+  location: staticWebAppLocation
   sku: {
     name: 'Free'
     tier: 'Free'

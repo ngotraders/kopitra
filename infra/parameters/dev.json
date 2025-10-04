@@ -8,6 +8,9 @@
     "location": {
       "value": "japaneast"
     },
+    "staticWebAppLocation": {
+      "value": "eastasia"
+    },
     "workloadName": {
       "value": "kopitra"
     },
