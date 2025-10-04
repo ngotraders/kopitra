@@ -407,6 +407,22 @@ SignalR bindings on Azure Functions supplement the HTTP API for live dashboard u
 
    # Launch the EA within its trading terminal and point it to http://localhost:8080 (or tunnel to Functions/App Service endpoints)
    ```
+
+### Local orchestration with go-task
+
+For environments where Docker is unavailable, the repository now includes a `Taskfile.yml` that orchestrates the Service Bus emulator, Rust gateway, Azure Functions app, and Ops Console frontend in parallel using [go-task](https://taskfile.dev).
+
+1. Install go-task following the [official instructions](https://taskfile.dev/installation/).
+2. From the repository root, start the entire local stack:
+   ```bash
+   task dev
+   ```
+   The task starts all services concurrently and streams their logs. Press `Ctrl+C` to stop every process together.
+3. Run every module's test suite in parallel:
+   ```bash
+   task verify
+   ```
+   Individual tasks (for example `task gateway:test` or `task opsconsole:dev`) remain available when you need to work on a single component.
 5. **Execute Tests & Linters**
    - Rust gateway:
      ```bash
