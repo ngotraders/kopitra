@@ -35,17 +35,17 @@ param registryServer string
 param targetPort int = 8080
 
 @description('CPU cores allocated to the container.')
-param cpu double = 0.5
+param cpu double = 0.25
 
 @description('Memory allocated to the container.')
-param memory string = '1.0Gi'
+param memory string = '0.5Gi'
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: logAnalyticsName
   location: location
   tags: tags
   properties: {
-    retentionInDays: 30
+    retentionInDays: 7
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
@@ -104,7 +104,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       ]
       scale: {
         minReplicas: 1
-        maxReplicas: 3
+        maxReplicas: 1
       }
     }
   }

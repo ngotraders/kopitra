@@ -72,7 +72,17 @@ az deployment group create \
   --parameters sqlAdministratorPassword="<secure-password>"
 ```
 
-Provide production-ready values for the owner contact, cost center, and SQL administrator credentials when promoting beyond development. The deployment creates an Azure Container Registry, Container Apps environment for the Rust gateway, Azure Functions app, Static Web App, Service Bus namespace, SQL Database (serverless), Cosmos DB account (serverless), and Key Vault with the managed identity role assignments required to avoid storing connection secrets in configuration.
+Provide production-ready values for the owner contact, cost center, and SQL administrator credentials when promoting beyond development. The deployment creates an Azure Container Registry, Container Apps environment for the Rust gateway, Azure Functions app, Static Web App, Service Bus namespace, SQL Database, and Key Vault with the managed identity role assignments required to avoid storing connection secrets in configuration. Cosmos DB can be enabled on demand by setting the `deployCosmos` parameter to `true` when a document store is required.
+
+### Cost-conscious defaults
+
+The development parameter file configures the lowest-cost SKU for each managed dependency:
+
+- **Azure Container Registry** – Basic tier.
+- **Azure Service Bus** – Basic tier queues.
+- **Azure SQL Database** – Basic DTU model with 5 DTUs.
+- **Azure Container Apps** – Single replica with 0.25 vCPU and 0.5 GiB memory, plus a 7-day Log Analytics retention window.
+- **Cosmos DB** – Disabled by default to avoid provisioning charges until explicitly needed.
 
 ### Continuous Deployment Pipelines
 

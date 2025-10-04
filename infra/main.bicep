@@ -41,7 +41,7 @@ param sqlAdministratorPassword string
 param gatewayImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
 @description('Set to true to provision the Cosmos DB account and container.')
-param deployCosmos bool = true
+param deployCosmos bool = false
 
 var tags = {
   application: workloadName
@@ -75,8 +75,8 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-pr
   name: containerRegistryName
   location: location
   sku: {
-    name: 'Standard'
-    tier: 'Standard'
+    name: 'Basic'
+    tier: 'Basic'
   }
   tags: tags
   properties: {

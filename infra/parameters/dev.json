@@ -25,9 +25,6 @@
     },
     "gatewayImage": {
       "value": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
-    },
-    "deployCosmos": {
-      "value": true
     }
   }
 }

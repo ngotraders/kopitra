@@ -24,8 +24,8 @@ resource namespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   location: location
   tags: tags
   sku: {
-    name: 'Standard'
-    tier: 'Standard'
+    name: 'Basic'
+    tier: 'Basic'
   }
   properties: {
     publicNetworkAccess: 'Enabled'
@@ -39,8 +39,6 @@ resource operationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-prev
     maxDeliveryCount: 5
     deadLetteringOnMessageExpiration: true
     defaultMessageTimeToLive: 'P14D'
-    requiresDuplicateDetection: true
-    duplicateDetectionHistoryTimeWindow: 'PT10M'
   }
 }
 
@@ -51,8 +49,6 @@ resource commandsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-previe
     maxDeliveryCount: 5
     deadLetteringOnMessageExpiration: true
     defaultMessageTimeToLive: 'P7D'
-    requiresDuplicateDetection: true
-    duplicateDetectionHistoryTimeWindow: 'PT10M'
   }
 }
 

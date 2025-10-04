@@ -38,18 +38,13 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-02-01-preview' = {
   location: location
   tags: tags
   sku: {
-    name: 'GP_S_Gen5_2'
-    tier: 'GeneralPurpose'
-    family: 'Gen5'
-    capacity: 2
+    name: 'Basic'
+    tier: 'Basic'
+    capacity: 5
   }
   properties: {
-    autoPauseDelay: 60
-    minCapacity: 0.5
-    zoneRedundant: false
-    readScale: 'Disabled'
-    requestedBackupStorageRedundancy: 'Local'
     collation: 'SQL_Latin1_General_CP1_CI_AS'
+    requestedBackupStorageRedundancy: 'Local'
   }
 }
 
