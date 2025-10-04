@@ -59,6 +59,48 @@ flowchart LR
 
 Copy-trade replication completes inside the Rust counterparty service to keep latency predictable; Service Bus queues carry only secondary events such as audit trail enrichment, alerting, and configuration tasks. Direct EA integration occurs exclusively over the documented Web API so that both directions of messaging stay under HTTP control with deterministic acknowledgement semantics.
 
+## Infrastructure as Code & Deployment
+
+Azure resources for Kopitra are provisioned through the Bicep template in `infra/main.bicep`. A starter parameter file (`infra/parameters/dev.json`) captures non-secret values for the development environment. Deploy the stack manually with:
+
+```bash
+az group create --name kopitra-rg-dev --location japaneast
+az deployment group create \
+  --resource-group kopitra-rg-dev \
+  --template-file infra/main.bicep \
+  --parameters @infra/parameters/dev.json \
+  --parameters sqlAdministratorPassword="<secure-password>"
+```
+
+Provide production-ready values for the owner contact, cost center, and SQL administrator credentials when promoting beyond development. The deployment creates an Azure Container Registry, Container Apps environment for the Rust gateway, Azure Functions app, Static Web App, Service Bus namespace, SQL Database, and Key Vault with the managed identity role assignments required to avoid storing connection secrets in configuration. Cosmos DB can be enabled on demand by setting the `deployCosmos` parameter to `true` when a document store is required.
+
+### Cost-conscious defaults
+
+The development parameter file configures the lowest-cost SKU for each managed dependency:
+
+- **Azure Container Registry** – Basic tier.
+- **Azure Service Bus** – Basic tier queues.
+- **Azure SQL Database** – Basic DTU model with 5 DTUs.
+- **Azure Container Apps** – Single replica with 0.25 vCPU and 0.5 GiB memory, plus a 7-day Log Analytics retention window.
+- **Cosmos DB** – Disabled by default to avoid provisioning charges until explicitly needed.
+
+### Continuous Deployment Pipelines
+
+The GitHub Actions workflow (`.github/workflows/ci-cd.yml`) builds, tests, and deploys each application after a push to `main`. It authenticates to Azure using OpenID Connect, so only the following repository secrets are required:
+
+- `AZURE_CLIENT_ID` – Client ID of the federated service principal.
+- `AZURE_TENANT_ID` – Azure AD tenant ID.
+- `AZURE_SUBSCRIPTION_ID` – Azure subscription ID.
+- `SQL_ADMIN_PASSWORD` – Secure password for the SQL administrator defined in the Bicep parameters.
+
+The pipeline performs these deploy steps on mainline pushes:
+
+- Builds and pushes the Rust gateway container image to the managed Azure Container Registry, then updates the Container App revision.
+- Publishes the Azure Functions project using zip deploy.
+- Uploads the built Ops Console assets via the Static Web Apps CLI using a short-lived deployment token retrieved at runtime.
+
+Pull requests continue to run format, lint, build, and test jobs without touching Azure resources.
+
 ## Cross-System API Specifications
 This section reflects the current message flows between the four core systems. Payloads are expressed as JSON; all timestamps are ISO-8601 with millisecond precision and UTC offset (`2024-03-27T02:09:11.124Z`).
 
