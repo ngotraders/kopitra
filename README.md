@@ -101,6 +101,8 @@ The pipeline performs these deploy steps on mainline pushes:
 
 Pull requests continue to run format, lint, build, and test jobs without touching Azure resources.
 
+Refer to [`docs/deployment/container-app-troubleshooting.md`](docs/deployment/container-app-troubleshooting.md) for a step-by-step checklist to investigate Container App deployment failures and validate that the latest image tag reached the registry.
+
 ## Cross-System API Specifications
 This section reflects the current message flows between the four core systems. Payloads are expressed as JSON; all timestamps are ISO-8601 with millisecond precision and UTC offset (`2024-03-27T02:09:11.124Z`).
 

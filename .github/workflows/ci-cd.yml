@@ -164,6 +164,36 @@ jobs:
           docker tag gateway "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
           docker push "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
 
+      - name: Verify image availability
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          az acr repository show-tags \
+            --name "$ACR_NAME" \
+            --repository "${WORKLOAD_NAME}-gateway" \
+            --orderby time_desc \
+            --top 5
+          if ! az acr repository show-manifests \
+            --name "$ACR_NAME" \
+            --repository "${WORKLOAD_NAME}-gateway" \
+            --query "[?tags[?@=='${GITHUB_SHA}']]" -o tsv | grep -q .; then
+            echo "Container image tag ${GITHUB_SHA} was not found in ${WORKLOAD_NAME}-gateway" >&2
+            echo "Confirm that the push step completed successfully." >&2
+            exit 1
+          fi
+
+      - name: Confirm Container App exists
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          if ! az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Container App $CONTAINER_APP_NAME not found in $RESOURCE_GROUP" >&2
+            echo "Ensure the infra job completed successfully before redeploying." >&2
+            exit 1
+          fi
+
       - name: Update Container App revision
         if: github.event_name != 'pull_request'
         run: |
@@ -171,6 +201,31 @@ jobs:
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
             --image "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
+
+      - name: Capture Container App diagnostics
+        if: failure() && github.event_name != 'pull_request'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "Collecting Container App diagnostics for $CONTAINER_APP_NAME" >&2
+          az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP"
+          az containerapp revision list \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output table
+          LATEST_REVISION=$(az containerapp revision list \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[0].name" -o tsv || true)
+          if [ -n "$LATEST_REVISION" ]; then
+            az containerapp logs show \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$LATEST_REVISION" \
+              --tail 50 || true
+          fi
 
   functions:
     name: Functions pipeline
