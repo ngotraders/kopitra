@@ -117,7 +117,7 @@ module containerAppModule 'bicep/containerapps.bicep' = {
       }
       {
         name: 'KEY_VAULT_URI'
-        value: 'https://${keyVaultName}.${az.environment().suffixes.keyvaultDns}/'
+        value: keyVaultModule.outputs.vaultUri
       }
     ]
     registryServer: containerRegistry.properties.loginServer
@@ -159,10 +159,6 @@ module keyVaultModule 'bicep/keyvault.bicep' = {
 
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
   name: serviceBusNamespaceName
-}
-
-resource keyVaultResource 'Microsoft.KeyVault/vaults@2023-02-01' existing = {
-  name: keyVaultName
 }
 
 module cosmosModule 'bicep/cosmosdb.bicep' = if (deployCosmos) {
@@ -281,7 +277,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'KEY_VAULT_URI'
-          value: keyVaultUri
+          value: keyVaultModule.outputs.vaultUri
         }
       ]
     }
@@ -325,6 +321,9 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(subscription().id, serviceBusNamespaceName, gatewayAppName, 'sb-sender')
   scope: serviceBusNamespace
+  dependsOn: [
+    serviceBusModule
+  ]
   properties: {
     principalId: containerAppModule.outputs.containerAppPrincipalId
     principalType: 'ServicePrincipal'
@@ -335,6 +334,9 @@ resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@202
 resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-receiver')
   scope: serviceBusNamespace
+  dependsOn: [
+    serviceBusModule
+  ]
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
@@ -345,6 +347,9 @@ resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2
 resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-sender-func')
   scope: serviceBusNamespace
+  dependsOn: [
+    serviceBusModule
+  ]
   properties: {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
@@ -352,23 +357,13 @@ resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssign
   }
 }
 
-resource keyVaultContainerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, keyVaultName, gatewayAppName, 'kv-reader')
-  scope: keyVaultResource
-  properties: {
-    principalId: containerAppModule.outputs.containerAppPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-  }
-}
-
-resource keyVaultFunctionAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, keyVaultName, functionAppName, 'kv-reader-func')
-  scope: keyVaultResource
-  properties: {
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+module keyVaultRoleAssignments 'bicep/keyvault-assignments.bicep' = {
+  name: 'keyVaultRoleAssignments'
+  params: {
+    keyVaultName: keyVaultName
+    keyVaultUri: keyVaultModule.outputs.vaultUri
+    containerAppPrincipalId: containerAppModule.outputs.containerAppPrincipalId
+    functionAppPrincipalId: functionApp.identity.principalId
   }
 }
 
@@ -383,5 +378,5 @@ output sqlServerFqdn string = '${sqlServerName}.${sqlServerHostSuffix}'
 output sqlDatabaseName string = sqlDatabaseName
 output functionAppName string = functionAppName
 output staticWebAppName string = staticWebAppName
-output keyVaultUri string = keyVaultUri
+output keyVaultUri string = keyVaultModule.outputs.vaultUri
 output cosmosAccountName string = deployCosmos ? cosmosAccountName : ''
