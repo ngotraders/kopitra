@@ -10,9 +10,6 @@ param namespaceName string
 @description('Tag dictionary applied to all resources created by this module.')
 param tags object
 
-@description('Target environment suffix used for child resource names.')
-param environment string
-
 @description('Operations queue name. Must be unique within the namespace.')
 param operationsQueueName string
 
@@ -33,7 +30,8 @@ resource namespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
 }
 
 resource operationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
-  name: '${namespace.name}/${operationsQueueName}'
+  name: operationsQueueName
+  parent: namespace
   properties: {
     lockDuration: 'PT30S'
     maxDeliveryCount: 5
@@ -43,7 +41,8 @@ resource operationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-prev
 }
 
 resource commandsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
-  name: '${namespace.name}/${commandsQueueName}'
+  name: commandsQueueName
+  parent: namespace
   properties: {
     lockDuration: 'PT30S'
     maxDeliveryCount: 5
