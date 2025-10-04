@@ -129,3 +129,4 @@ output containerAppPrincipalId string = containerApp.identity.principalId
 output managedEnvironmentId string = managedEnvironment.id
 output containerAppId string = containerApp.id
 output registryIdentityPrincipalId string = registryIdentity.properties.principalId
+output logAnalyticsId string = logAnalytics.id
