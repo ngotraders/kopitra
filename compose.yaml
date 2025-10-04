@@ -21,6 +21,7 @@ services:
     depends_on:
       - servicebus
   management:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: functions/Dockerfile

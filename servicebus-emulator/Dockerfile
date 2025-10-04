@@ -1,4 +1,4 @@
-FROM rust:1.74 as builder
+FROM rust:1.82 AS builder
 WORKDIR /app
 COPY servicebus-emulator/Cargo.toml servicebus-emulator/Cargo.lock* ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
