@@ -88,7 +88,8 @@ jobs:
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
             --parameters @${PARAMETERS_FILE} \
-            --parameters sqlAdministratorPassword="$SQL_ADMIN_PASSWORD"
+            --parameters sqlAdministratorPassword="$SQL_ADMIN_PASSWORD" \
+            --debug
 
   gateway:
     name: Gateway pipeline
