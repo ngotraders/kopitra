@@ -65,7 +65,7 @@ var tags = {
 }
 
 var resourceGroupName = resourceGroup().name
-var logAnalyticsName = '${workloadName}-law-${environment}'
+var logAnalyticsName = '${workloadName}-log-${environment}'
 var managedEnvironmentName = '${workloadName}-cae-${environment}'
 var gatewayAppName = '${workloadName}-gateway-aca-${environment}'
 var containerRegistryName = toLower('${workloadName}${environment}acr')
@@ -81,8 +81,6 @@ var keyVaultName = toLower('${workloadName}-kv-${environment}')
 var staticWebAppName = '${workloadName}-ops-${environment}'
 var appInsightsName = '${workloadName}-appi-${environment}'
 var cosmosAccountName = toLower('${workloadName}-cdb-${environment}')
-var cosmosDatabaseName = '${workloadName}-cosmos-${environment}'
-var cosmosContainerName = 'events'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: containerRegistryName
@@ -103,7 +101,6 @@ module containerAppModule 'bicep/containerapps.bicep' = {
     location: location
     tags: tags
     workloadName: workloadName
-    environment: environment
     logAnalyticsName: logAnalyticsName
     managedEnvironmentName: managedEnvironmentName
     containerAppName: gatewayAppName
@@ -134,7 +131,6 @@ module containerAppModule 'bicep/containerapps.bicep' = {
         value: keyVaultModule.outputs.vaultUri
       }
     ]
-    registryServer: containerRegistry.properties.loginServer
   }
 }
 
@@ -173,17 +169,6 @@ module keyVaultModule 'bicep/keyvault.bicep' = {
 
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
   name: serviceBusNamespaceName
-}
-
-module cosmosModule 'bicep/cosmosdb.bicep' = if (deployCosmos) {
-  name: 'cosmosDb'
-  params: {
-    accountName: cosmosAccountName
-    location: location
-    tags: tags
-    databaseName: cosmosDatabaseName
-    containerName: cosmosContainerName
-  }
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
@@ -232,17 +217,14 @@ var sqlServerHostSuffix = az.environment().suffixes.sqlServerHostname
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
-  kind: 'functionapp,linux'
+  kind: 'functionapp'
   tags: tags
-  identity: {
-    type: 'SystemAssigned'
-  }
   properties: {
     httpsOnly: true
     serverFarmId: functionPlan.id
     reserved: true
     siteConfig: {
-      linuxFxVersion: 'DOTNET-ISOLATED|8.0'
+      windowsFxVersion: 'DOTNET-ISOLATED|8.0'
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
@@ -321,29 +303,6 @@ resource sqlFirewallRule 'Microsoft.Sql/servers/firewallRules@2022-02-01-preview
   }
 }
 
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
-  name: guid(subscription().id, containerRegistryName, gatewayAppName, 'acr-pull')
-  scope: containerRegistry
-  properties: {
-    principalId: containerAppModule.outputs.registryIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  }
-}
-
-resource serviceBusSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
-  name: guid(subscription().id, serviceBusNamespaceName, gatewayAppName, 'sb-sender')
-  scope: serviceBusNamespace
-  dependsOn: [
-    serviceBusModule
-  ]
-  properties: {
-    principalId: containerAppModule.outputs.containerAppPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
-  }
-}
-
 resource serviceBusReceiverAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRoleAssignments) {
   name: guid(subscription().id, serviceBusNamespaceName, functionAppName, 'sb-receiver')
   scope: serviceBusNamespace
@@ -367,16 +326,6 @@ resource serviceBusSenderAssignmentFunctions 'Microsoft.Authorization/roleAssign
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
-  }
-}
-
-module keyVaultRoleAssignments 'bicep/keyvault-assignments.bicep' = if (deployRoleAssignments) {
-  name: 'keyVaultRoleAssignments'
-  params: {
-    keyVaultName: keyVaultName
-    keyVaultUri: keyVaultModule.outputs.vaultUri
-    containerAppPrincipalId: containerAppModule.outputs.containerAppPrincipalId
-    functionAppPrincipalId: functionApp.identity.principalId
   }
 }
 

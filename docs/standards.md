@@ -110,6 +110,6 @@ Automate role assignments in infrastructure templates to guarantee deterministic
 
 ## 4. Using This Document
 
-* Infrastructure templates **must** reference this file in comments and enforce the rules above (see `infra/container-app.bicep` for an example implementation).
+* Infrastructure templates **must** reference this file in comments and enforce the rules above (see `infra/main.bicep` for an example implementation).
 * Application and operations teams should review these standards before provisioning new Azure resources or onboarding a new environment.
 * Update this document whenever naming, tagging, or identity requirements evolve. Changes should be communicated to all teams via release notes or pull requests.

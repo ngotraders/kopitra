@@ -19,17 +19,11 @@ param managedEnvironmentName string
 @description('Container App resource name.')
 param containerAppName string
 
-@description('Environment suffix used for naming ancillary resources (e.g., dev, stg, prod).')
-param environment string
-
 @description('Initial container image reference (e.g., registry.azurecr.io/image:tag).')
 param containerImage string
 
 @description('Optional environment variables to inject into the container.')
 param containerEnvVars array = []
-
-@description('Container Registry login server used for the container image.')
-param registryServer string
 
 @description('Target ingress port exposed by the application.')
 param targetPort int = 8080
@@ -48,14 +42,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: 30
-    features: {
-      enableLogAccessUsingOnlyResourcePermissions: true
-    }
   }
 }
-
-var logAnalyticsSharedKey = listKeys(logAnalytics.id, '2020-08-01').primarySharedKey
 
 resource managedEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
   name: managedEnvironmentName
@@ -66,44 +54,23 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalyticsSharedKey
+        sharedKey: logAnalytics.listkeys().primarySharedKey
       }
     }
   }
-}
-
-var cpuValue = json(cpu)
-var registryIdentityName = '${workloadName}-acr-id-${environment}'
-
-resource registryIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: registryIdentityName
-  location: location
-  tags: tags
 }
 
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: containerAppName
   location: location
   tags: tags
-  identity: {
-    type: 'SystemAssigned,UserAssigned'
-    userAssignedIdentities: {
-      '${registryIdentity.id}': {}
-    }
-  }
   properties: {
     managedEnvironmentId: managedEnvironment.id
     configuration: {
       ingress: {
-        external: false
+        external: true
         targetPort: targetPort
       }
-      registries: [
-        {
-          server: registryServer
-          identity: registryIdentity.id
-        }
-      ]
     }
     template: {
       containers: [
@@ -112,7 +79,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           image: containerImage
           env: containerEnvVars
           resources: {
-            cpu: cpuValue
+            cpu: json(cpu)
             memory: memory
           }
         }
@@ -125,8 +92,6 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   }
 }
 
-output containerAppPrincipalId string = containerApp.identity.principalId
 output managedEnvironmentId string = managedEnvironment.id
 output containerAppId string = containerApp.id
-output registryIdentityPrincipalId string = registryIdentity.properties.principalId
 output logAnalyticsId string = logAnalytics.id
