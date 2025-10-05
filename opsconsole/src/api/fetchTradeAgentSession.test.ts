@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchTradeAgentSession } from './fetchTradeAgentSession';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchTradeAgentSession', () => {
   it('returns session details and logs', async () => {

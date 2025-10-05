@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchCopyTradePerformanceAggregates } from './fetchCopyTradePerformanceAggregates';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchCopyTradePerformanceAggregates', () => {
   it('describes copy trade outcomes across environments', async () => {

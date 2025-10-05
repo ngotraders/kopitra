@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchOperationsHealth } from './fetchOperationsHealth';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchOperationsHealth', () => {
   it('returns high-level operational KPIs', async () => {

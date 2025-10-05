@@ -1,7 +1,7 @@
-import { commandPresets } from '../data/console.ts';
 import type { CommandPreset } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchOperationsCommandPresets(): Promise<CommandPreset[]> {
-  return clone(commandPresets);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.commandPresets;
 }

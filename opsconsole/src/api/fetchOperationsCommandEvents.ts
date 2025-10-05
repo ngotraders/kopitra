@@ -1,7 +1,7 @@
-import { commandEvents } from '../data/console.ts';
 import type { CommandEvent } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchOperationsCommandEvents(): Promise<CommandEvent[]> {
-  return clone(commandEvents);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.commandEvents;
 }

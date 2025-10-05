@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchTradeAgentDetail } from './fetchTradeAgentDetail';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchTradeAgentDetail', () => {
   it('returns detail payload for a trade agent', async () => {

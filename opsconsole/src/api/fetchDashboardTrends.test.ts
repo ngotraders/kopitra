@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchDashboardTrends } from './fetchDashboardTrends';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchDashboardTrends', () => {
   it('returns dashboard performance comparisons', async () => {

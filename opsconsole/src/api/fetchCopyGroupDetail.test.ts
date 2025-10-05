@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchCopyGroupDetail } from './fetchCopyGroupDetail';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchCopyGroupDetail', () => {
   it('returns a composite payload for the requested copy group', async () => {

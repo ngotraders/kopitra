@@ -1,7 +1,7 @@
-import { tradeAgents } from '../data/console.ts';
 import type { TradeAgentSummary } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchTradeAgents(): Promise<TradeAgentSummary[]> {
-  return clone(tradeAgents);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.tradeAgents;
 }
