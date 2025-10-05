@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchCopyTradeFunnel } from './fetchCopyTradeFunnel';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchCopyTradeFunnel', () => {
   it('provides funnel stages with conversion data', async () => {

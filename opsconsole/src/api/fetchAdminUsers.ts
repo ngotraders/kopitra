@@ -1,7 +1,7 @@
-import { users } from '../data/console.ts';
 import type { UserRecord } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchAdminUsers(): Promise<UserRecord[]> {
-  return clone(users);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.users;
 }

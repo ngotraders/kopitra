@@ -1,7 +1,7 @@
-import { copyGroupSummaries } from '../data/console.ts';
 import type { CopyGroupSummary } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchCopyGroupSummaries(): Promise<CopyGroupSummary[]> {
-  return clone(copyGroupSummaries);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.copyGroupSummaries;
 }

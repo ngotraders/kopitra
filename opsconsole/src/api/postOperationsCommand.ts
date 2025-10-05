@@ -1,4 +1,5 @@
 import type { CommandEvent } from '../types/console.ts';
+import { expectManagementOk, managementRequest } from './integration/config.ts';
 
 export interface PostOperationsCommandInput {
   command: string;
@@ -6,24 +7,15 @@ export interface PostOperationsCommandInput {
   operator: string;
 }
 
-function createCommandId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `cmd-${crypto.randomUUID()}`;
-  }
-  return `cmd-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export async function postOperationsCommand(
   input: PostOperationsCommandInput,
 ): Promise<CommandEvent> {
-  const issuedAt = new Date().toISOString();
-
-  return {
-    id: createCommandId(),
-    command: input.command,
-    scope: input.scope,
-    operator: input.operator,
-    issuedAt,
-    status: 'pending',
-  } satisfies CommandEvent;
+  const response = await managementRequest('/opsconsole/commands', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  await expectManagementOk(response);
+  const payload = (await response.json()) as CommandEvent;
+  return payload;
 }

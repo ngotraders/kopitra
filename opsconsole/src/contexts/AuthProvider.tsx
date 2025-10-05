@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCurrentUser } from '../api/fetchCurrentUser.ts';
-import { currentUser as defaultUser } from '../data/console.ts';
 import type { ConsoleRole, ConsoleUser } from '../types/console.ts';
 import { AuthContext, type AuthContextValue } from './auth-context.ts';
 
@@ -11,15 +10,16 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children, user }: AuthProviderProps) {
+  const fallbackUser: ConsoleUser = { id: '', name: '', email: '', roles: [] };
   const { data } = useQuery({
     queryKey: ['currentUser'],
     queryFn: fetchCurrentUser,
     enabled: !user,
-    initialData: user ?? defaultUser,
+    initialData: user,
     staleTime: 5 * 60 * 1000,
   });
 
-  const resolvedUser = user ?? data ?? defaultUser;
+  const resolvedUser = user ?? data ?? fallbackUser;
 
   const value = useMemo<AuthContextValue>(() => {
     const normalizedRoles = Array.from(new Set(resolvedUser.roles));

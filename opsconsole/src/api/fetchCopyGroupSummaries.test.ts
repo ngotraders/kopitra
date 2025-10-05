@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchCopyGroupSummaries } from './fetchCopyGroupSummaries';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchCopyGroupSummaries', () => {
   it('returns copy group catalogue summaries', async () => {

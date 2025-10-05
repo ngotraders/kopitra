@@ -1,7 +1,7 @@
-import { dashboardTrends } from '../data/console.ts';
 import type { PerformanceTrend } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchDashboardTrends(): Promise<PerformanceTrend[]> {
-  return clone(dashboardTrends);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.dashboardTrends;
 }

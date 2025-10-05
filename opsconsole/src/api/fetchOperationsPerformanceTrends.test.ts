@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchOperationsPerformanceTrends } from './fetchOperationsPerformanceTrends';
+
+vi.mock('./opsConsoleSnapshot.ts', async () => await import('./__mocks__/opsConsoleSnapshot.ts'));
 
 describe('fetchOperationsPerformanceTrends', () => {
   it('returns performance funnel metrics for operations dashboards', async () => {

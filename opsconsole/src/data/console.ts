@@ -663,3 +663,28 @@ export const userActivity: Record<string, UserActivityEvent[]> = {
     },
   ],
 };
+
+export const consoleSnapshot = {
+  navigationItems,
+  currentUser,
+  statMetrics,
+  activities,
+  dashboardTrends,
+  operationsHealth,
+  operationsIncidents,
+  commandPresets,
+  commandEvents,
+  operationsPerformanceTrends,
+  copyTradeFunnelStages,
+  copyTradePerformanceAggregates,
+  copyGroupSummaries,
+  copyGroupMembers,
+  copyGroupRoutes,
+  copyGroupPerformance,
+  tradeAgents,
+  tradeAgentSessions,
+  tradeAgentCommands,
+  tradeAgentLogs,
+  users,
+  userActivity,
+};

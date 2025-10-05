@@ -1,16 +1,16 @@
-import { userActivity, users } from '../data/console.ts';
 import type { AdminUserDetail } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchAdminUserDetail(userId: string): Promise<AdminUserDetail> {
-  const record = users.find((user) => user.id === userId);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  const record = snapshot.users.find((user) => user.id === userId);
 
   if (!record) {
     throw new Error(`User ${userId} not found`);
   }
 
-  return clone({
+  return {
     user: record,
-    activity: userActivity[userId] ?? [],
-  });
+    activity: snapshot.userActivity[userId] ?? [],
+  };
 }

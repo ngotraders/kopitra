@@ -1,7 +1,7 @@
-import { operationsHealth } from '../data/console.ts';
 import type { HealthKpi } from '../types/console.ts';
-import { clone } from './utils.ts';
+import { fetchOpsConsoleSnapshot } from './opsConsoleSnapshot.ts';
 
 export async function fetchOperationsHealth(): Promise<HealthKpi[]> {
-  return clone(operationsHealth);
+  const snapshot = await fetchOpsConsoleSnapshot();
+  return snapshot.operationsHealth;
 }
