@@ -1,6 +1,6 @@
 use std::{env, time::Duration};
 
-use azure_core::{StatusCode, error::Error as AzureError, new_http_client};
+use azure_core::{error::Error as AzureError, new_http_client, StatusCode};
 use azure_messaging_servicebus::prelude::QueueClient;
 use reqwest::{Client as HttpClient, StatusCode as HttpStatusCode, Url};
 use serde::Deserialize;

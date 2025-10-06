@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr};
 
-use gateway::{AppState, ServiceBusConfig, ServiceBusWorker, router};
+use gateway::{router, AppState, ServiceBusConfig, ServiceBusWorker};
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;

@@ -11,5 +11,7 @@
 ## Required Checks
 Before submitting changes under `gateway/`, run:
 
-- `cargo fmt --manifest-path gateway/Cargo.toml`
+- `cargo fmt --manifest-path gateway/Cargo.toml -- --check`
+- `cargo clippy --manifest-path gateway/Cargo.toml --all-targets --all-features`
+- `cargo check --manifest-path gateway/Cargo.toml`
 - `cargo test --manifest-path gateway/Cargo.toml`

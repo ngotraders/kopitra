@@ -43,7 +43,7 @@ public sealed class EnqueueExpertAdvisorTradeOrderFunction
     [OpenApiSecurity("bearer_token", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
     [OpenApiParameter(name: "expertAdvisorId", In = ParameterLocation.Path, Required = true, Type = typeof(string), Summary = "Expert advisor identifier", Description = "The identifier of the expert advisor.", Visibility = OpenApiVisibilityType.Important)]
     [OpenApiParameter(name: "sessionId", In = ParameterLocation.Path, Required = true, Type = typeof(Guid), Summary = "Session identifier", Description = "The session identifier issued by the trade gateway.", Visibility = OpenApiVisibilityType.Important)]
-    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(EnqueueExpertAdvisorTradeOrderRequest), Required = true, Description = "Trade command payload." )]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(EnqueueExpertAdvisorTradeOrderRequest), Required = true, Description = "Trade command payload.")]
     [OpenApiResponseWithoutBody(statusCode: HttpStatusCode.Accepted, Summary = "Trade order enqueued", Description = "The trade order has been queued for the expert advisor session.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "admin/experts/{expertAdvisorId}/sessions/{sessionId}/trade-orders")] HttpRequestData request,

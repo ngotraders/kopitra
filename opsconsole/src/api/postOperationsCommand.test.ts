@@ -2,17 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { postOperationsCommand } from './postOperationsCommand';
 
 const mocks = vi.hoisted(() => {
-  const managementRequestMock = vi.fn(async () =>
-    new Response(
-      JSON.stringify({
-        id: 'cmd-123',
-        command: 'Restart agent',
-        scope: 'Trade agent TA-1402',
-        operator: 'Casey Rivers',
-        issuedAt: '2024-04-22T08:12:00Z',
-        status: 'pending',
-      }),
-    ),
+  const managementRequestMock = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          id: 'cmd-123',
+          command: 'Restart agent',
+          scope: 'Trade agent TA-1402',
+          operator: 'Casey Rivers',
+          issuedAt: '2024-04-22T08:12:00Z',
+          status: 'pending',
+        }),
+      ),
   );
   const expectManagementOkMock = vi.fn(async () => undefined);
   return { managementRequestMock, expectManagementOkMock };

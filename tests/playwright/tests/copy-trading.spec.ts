@@ -48,7 +48,9 @@ async function refreshOutbox(page: Page, accountId: string): Promise<OutboxEvent
 
 async function acknowledgeOutbox(page: Page, accountId: string) {
   await page.getByTestId(`ack-outbox-${accountId}`).click();
-  await expect(page.getByTestId(`session-status-${accountId}`)).toContainText('Events acknowledged');
+  await expect(page.getByTestId(`session-status-${accountId}`)).toContainText(
+    'Events acknowledged',
+  );
 }
 
 async function sendDirectOrder(
@@ -96,20 +98,34 @@ async function sendDirectOrder(
   });
 }
 
-async function createCopyGroup(page: Page, groupId: string, name: string, requestedBy = 'ops-console') {
+async function createCopyGroup(
+  page: Page,
+  groupId: string,
+  name: string,
+  requestedBy = 'ops-console',
+) {
   await test.step(`create copy group ${groupId}`, async () => {
     await page.getByTestId('group-id').fill(groupId);
     await page.getByTestId('group-name').fill(name);
     await page.getByTestId('group-requested-by').fill(requestedBy);
     await page.getByTestId('group-submit').click();
-    await expect(page.getByTestId('workbench-status')).toContainText(`Copy group ${groupId} created`);
+    await expect(page.getByTestId('workbench-status')).toContainText(
+      `Copy group ${groupId} created`,
+    );
     await expect(page.getByTestId(`group-card-${groupId}`)).toBeVisible();
   });
 }
 
 async function addGroupMember(
   page: Page,
-  params: { groupId: string; accountId: string; role: string; riskStrategy: string; allocation: string; requestedBy?: string },
+  params: {
+    groupId: string;
+    accountId: string;
+    role: string;
+    riskStrategy: string;
+    allocation: string;
+    requestedBy?: string;
+  },
 ) {
   await test.step(`add member ${params.accountId} to ${params.groupId}`, async () => {
     await page.getByTestId('member-group').selectOption(params.groupId);
@@ -167,7 +183,9 @@ async function executeCopyTrade(
       await page.getByTestId('copy-position-id').fill(params.positionId);
     }
     await page.getByTestId('copy-submit').click();
-    await expect(page.getByTestId('workbench-status')).toContainText(`Copy trade dispatched for ${params.groupId}`);
+    await expect(page.getByTestId('workbench-status')).toContainText(
+      `Copy trade dispatched for ${params.groupId}`,
+    );
   });
 }
 
@@ -246,7 +264,9 @@ test.describe.serial('copy trading management flows via ops console', () => {
     });
 
     const membershipEvents = await refreshOutbox(page, 'acct-follower');
-    expect(membershipEvents.some((event) => event.eventType === 'CopyTradeGroupUpdated')).toBeTruthy();
+    expect(
+      membershipEvents.some((event) => event.eventType === 'CopyTradeGroupUpdated'),
+    ).toBeTruthy();
     await acknowledgeOutbox(page, 'acct-follower');
 
     await executeCopyTrade(page, {
@@ -408,7 +428,9 @@ test.describe.serial('copy trading management flows via ops console', () => {
     });
 
     const followerUpdates = await refreshOutbox(page, 'acct-cross-follower');
-    expect(followerUpdates.filter((event) => event.eventType === 'CopyTradeGroupUpdated')).toHaveLength(2);
+    expect(
+      followerUpdates.filter((event) => event.eventType === 'CopyTradeGroupUpdated'),
+    ).toHaveLength(2);
     await acknowledgeOutbox(page, 'acct-cross-follower');
 
     await executeCopyTrade(page, {
@@ -447,4 +469,3 @@ test.describe.serial('copy trading management flows via ops console', () => {
     await acknowledgeOutbox(page, 'acct-cross-follower');
   });
 });
-

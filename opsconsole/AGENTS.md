@@ -20,3 +20,12 @@ These instructions apply to the entire `opsconsole` directory, including nested 
 ## Tooling
 
 - Keep Storybook and Vitest configurations in sync with the component and hook requirements above.
+
+## Required Checks
+
+Before submitting changes under `opsconsole/`, run:
+
+- `npm run format:check`
+- `npm run lint`
+- `npm run build`
+- `npm run test`
