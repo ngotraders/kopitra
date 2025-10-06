@@ -94,11 +94,9 @@ jobs:
     name: Gateway pipeline
     needs:
       - changes
-      - infra
-    if: needs.changes.outputs.gateway == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Checkout repository
@@ -113,17 +111,14 @@ jobs:
           override: true
 
       - name: Rust format check
-        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo fmt --all -- --check
 
       - name: Rust linting (clippy)
-        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Rust build
-        if: github.event_name != 'pull_request'
         working-directory: gateway
         run: cargo build --all-targets --locked
 
@@ -131,8 +126,22 @@ jobs:
         working-directory: gateway
         run: cargo test --all --locked
 
+  gateway_deploy:
+    name: Gateway deployment
+    needs:
+      - changes
+      - infra
+      - gateway
+    if: github.event_name != 'pull_request' && needs.changes.outputs.gateway == 'true' && needs.infra.result == 'success' && needs.gateway.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Prepare deployment variables
-        if: github.event_name != 'pull_request'
         run: |
           workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
           env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
@@ -142,7 +151,6 @@ jobs:
           echo "CONTAINER_APP_NAME=${workload}-gateway-aca-${env_suffix}" >> "$GITHUB_ENV"
 
       - name: Azure login
-        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -150,22 +158,18 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install Container Apps extension
-        if: github.event_name != 'pull_request'
         run: az extension add --name containerapp --yes --upgrade
 
       - name: Build gateway image
-        if: github.event_name != 'pull_request'
         run: docker build -f gateway/Dockerfile -t gateway .
 
       - name: Push image to ACR
-        if: github.event_name != 'pull_request'
         run: |
           az acr login --name "$ACR_NAME"
           docker tag gateway "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
           docker push "$ACR_LOGIN_SERVER/${WORKLOAD_NAME}-gateway:${GITHUB_SHA}"
 
       - name: Update Container App revision
-        if: github.event_name != 'pull_request'
         run: |
           az containerapp update \
             --name "$CONTAINER_APP_NAME" \
@@ -176,8 +180,43 @@ jobs:
     name: Functions pipeline
     needs:
       - changes
+    if: needs.changes.outputs.functions == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore .NET dependencies
+        working-directory: functions
+        run: dotnet restore Functions.sln
+
+      - name: .NET format check
+        working-directory: functions
+        run: dotnet format Functions.sln --verify-no-changes --verbosity minimal
+
+      - name: .NET build
+        working-directory: functions
+        run: dotnet build Functions.sln --no-restore
+
+      - name: Run .NET tests
+        working-directory: functions
+        run: dotnet test Functions.sln --no-build
+
+  functions_deploy:
+    name: Functions deployment
+    needs:
+      - changes
       - infra
-    if: needs.changes.outputs.functions == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
+      - functions
+    if: github.event_name != 'pull_request' && needs.changes.outputs.functions == 'true' && needs.infra.result == 'success' && needs.functions.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -193,32 +232,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore .NET dependencies
-        if: github.event_name != 'pull_request'
         working-directory: functions
         run: dotnet restore Functions.sln
 
-      - name: .NET format check
-        if: github.event_name != 'pull_request'
-        working-directory: functions
-        run: dotnet format Functions.sln --verify-no-changes --verbosity minimal
-
-      - name: .NET build
-        if: github.event_name != 'pull_request'
-        working-directory: functions
-        run: dotnet build Functions.sln --no-restore
-
-      - name: Run .NET tests (PR)
-        if: github.event_name == 'pull_request'
-        working-directory: functions
-        run: dotnet test Functions.sln
-
-      - name: Run .NET tests (push)
-        if: github.event_name != 'pull_request'
-        working-directory: functions
-        run: dotnet test Functions.sln --no-build
-
       - name: Prepare deployment variables
-        if: github.event_name != 'pull_request'
         run: |
           workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
           env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
@@ -226,7 +243,6 @@ jobs:
           echo "FUNCTION_APP_NAME=${workload}-func-${env_suffix}" >> "$GITHUB_ENV"
 
       - name: Azure login
-        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -234,7 +250,6 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Publish Functions package
-        if: github.event_name != 'pull_request'
         working-directory: functions
         run: |
           dotnet publish src/Kopitra.ManagementApi/Kopitra.ManagementApi.csproj -c Release -o publish
@@ -242,7 +257,6 @@ jobs:
           zip -r ../publish.zip .
 
       - name: Deploy Functions app
-        if: github.event_name != 'pull_request'
         working-directory: functions
         run: |
           az functionapp deployment source config-zip \
@@ -254,11 +268,9 @@ jobs:
     name: Ops console pipeline
     needs:
       - changes
-      - infra
-    if: needs.changes.outputs.opsconsole == 'true' && (github.event_name == 'pull_request' || needs.infra.result == 'success')
+    if: needs.changes.outputs.opsconsole == 'true'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -296,8 +308,38 @@ jobs:
         working-directory: opsconsole
         run: npm run build-storybook
 
+  opsconsole_deploy:
+    name: Ops console deployment
+    needs:
+      - changes
+      - infra
+      - opsconsole
+    if: github.event_name != 'pull_request' && needs.changes.outputs.opsconsole == 'true' && needs.infra.result == 'success' && needs.opsconsole.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: opsconsole/package-lock.json
+
+      - name: Install dependencies
+        working-directory: opsconsole
+        run: npm ci
+
+      - name: Build application
+        working-directory: opsconsole
+        run: npm run build
+
       - name: Prepare deployment variables
-        if: github.event_name != 'pull_request'
         run: |
           workload="$(echo "$WORKLOAD_NAME" | tr '[:upper:]' '[:lower:]')"
           env_suffix="$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')"
@@ -305,7 +347,6 @@ jobs:
           echo "STATIC_WEB_APP_NAME=${workload}-ops-${env_suffix}" >> "$GITHUB_ENV"
 
       - name: Azure login
-        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -313,15 +354,12 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install Static Web Apps extension
-        if: github.event_name != 'pull_request'
         run: az extension add --name staticwebapp --yes --upgrade
 
       - name: Install Static Web Apps CLI
-        if: github.event_name != 'pull_request'
         run: npm install -g @azure/static-web-apps-cli
 
       - name: Deploy static assets
-        if: github.event_name != 'pull_request'
         working-directory: opsconsole
         run: |
           TOKEN=$(az staticwebapp secrets list \
