@@ -2,15 +2,15 @@ use std::fmt::Debug;
 
 use axum::{
     body::Body,
-    http::{self, Request, StatusCode, header},
+    http::{self, header, Request, StatusCode},
     response::Response,
 };
 use gateway::{
-    AdminApprovalCommand, AdminCommand, AdminCommandOutcome, AppState, AuthMethod, SessionStatus,
-    router,
+    router, AdminApprovalCommand, AdminCommand, AdminCommandOutcome, AppState, AuthMethod,
+    SessionStatus,
 };
 use http_body_util::BodyExt;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tower::ServiceExt;
