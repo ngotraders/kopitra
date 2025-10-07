@@ -32,11 +32,11 @@ describe('LoginPage', () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.type(screen.getByTestId('login-userId'), ' operator-7 ');
     await userEvent.type(screen.getByTestId('login-email'), ' operator@example.com ');
+    await userEvent.type(screen.getByTestId('login-password'), 'pa55word');
     await userEvent.click(screen.getByTestId('login-submit'));
 
-    expect(signIn).toHaveBeenCalledWith({ userId: 'operator-7', email: 'operator@example.com' });
+    expect(signIn).toHaveBeenCalledWith({ email: 'operator@example.com', password: 'pa55word' });
   });
 
   it('shows a validation error when inputs are missing', async () => {
@@ -66,7 +66,7 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByTestId('login-submit'));
 
     const error = await screen.findByTestId('login-error');
-    expect(error).toHaveTextContent(/enter your operator id/i);
+    expect(error).toHaveTextContent(/enter your email and password/i);
     expect(signIn).not.toHaveBeenCalled();
   });
 });

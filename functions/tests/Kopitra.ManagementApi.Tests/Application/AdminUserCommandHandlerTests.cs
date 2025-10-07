@@ -32,7 +32,8 @@ public class AdminUserCommandHandlerTests
                 "alice@example.com",
                 "Alice",
                 new[] { AdminUserRole.Operator, AdminUserRole.Auditor },
-                "system"),
+                "system",
+                "StrongPassword!1"),
             CancellationToken.None);
         Assert.Equal("Alice", provisioned.DisplayName);
         Assert.False(provisioned.EmailEnabled);

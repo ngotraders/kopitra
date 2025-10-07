@@ -12,8 +12,8 @@ export function LoginPage() {
   const { signIn, isAuthenticated, isLoading } = useAuthorization();
   const navigate = useNavigate();
   const location = useLocation();
-  const [userId, setUserId] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,18 +32,17 @@ export function LoginPage() {
         return;
       }
 
-      const trimmedUserId = userId.trim();
       const trimmedEmail = email.trim();
 
-      if (!trimmedUserId || !trimmedEmail) {
-        setError('Enter your operator ID and email to continue.');
+      if (!trimmedEmail || !password) {
+        setError('Enter your email and password to continue.');
         return;
       }
 
       setSubmitting(true);
       setError(null);
       try {
-        await signIn({ userId: trimmedUserId, email: trimmedEmail.toLowerCase() });
+        await signIn({ email: trimmedEmail.toLowerCase(), password });
         navigate(destination, { replace: true });
       } catch (err) {
         const message =
@@ -55,7 +54,7 @@ export function LoginPage() {
         setSubmitting(false);
       }
     },
-    [destination, email, navigate, signIn, submitting, userId],
+    [destination, email, navigate, password, signIn, submitting],
   );
 
   return (
@@ -66,21 +65,6 @@ export function LoginPage() {
           Authenticate with your operator directory credentials to manage copy trading operations.
         </p>
         <form className="login-form" onSubmit={handleSubmit} noValidate>
-          <label className="login-form__label" htmlFor="login-user-id">
-            Operator ID
-          </label>
-          <input
-            id="login-user-id"
-            name="userId"
-            data-testid="login-userId"
-            className="login-form__input"
-            autoComplete="username"
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            disabled={submitting || isLoading}
-            required
-          />
-
           <label className="login-form__label" htmlFor="login-email">
             Email
           </label>
@@ -93,6 +77,22 @@ export function LoginPage() {
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            disabled={submitting || isLoading}
+            required
+          />
+
+          <label className="login-form__label" htmlFor="login-password">
+            Password
+          </label>
+          <input
+            id="login-password"
+            name="password"
+            data-testid="login-password"
+            className="login-form__input"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             disabled={submitting || isLoading}
             required
           />

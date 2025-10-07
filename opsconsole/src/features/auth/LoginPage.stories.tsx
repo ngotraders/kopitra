@@ -42,17 +42,17 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   play: async ({ canvasElement, parameters }) => {
     const canvas = within(canvasElement);
-    const operatorInput = await canvas.findByTestId('login-userId');
     const emailInput = await canvas.findByTestId('login-email');
+    const passwordInput = await canvas.findByTestId('login-password');
     const submitButton = await canvas.findByTestId('login-submit');
 
-    await userEvent.type(operatorInput, 'operator-1');
     await userEvent.type(emailInput, 'operator@example.com');
+    await userEvent.type(passwordInput, 'pw123456');
     await userEvent.click(submitButton);
 
     expect(parameters.signInMock).toHaveBeenCalledWith({
-      userId: 'operator-1',
       email: 'operator@example.com',
+      password: 'pw123456',
     });
   },
 };

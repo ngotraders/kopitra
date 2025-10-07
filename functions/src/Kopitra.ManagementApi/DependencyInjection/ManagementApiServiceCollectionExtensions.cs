@@ -17,6 +17,7 @@ using Kopitra.ManagementApi.Common.RequestValidation;
 using Kopitra.ManagementApi.Domain;
 using Kopitra.ManagementApi.Domain.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure;
+using Kopitra.ManagementApi.Infrastructure.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Infrastructure.EventLog;
 using Kopitra.ManagementApi.Infrastructure.Eventing;
@@ -48,6 +49,7 @@ public static class ManagementApiServiceCollectionExtensions
         services.TryAddSingleton<IExpertAdvisorReadModelStore, InMemoryExpertAdvisorReadModelStore>();
         services.TryAddSingleton<ICopyTradeGroupReadModelStore, InMemoryCopyTradeGroupReadModelStore>();
         services.TryAddSingleton<IAdminUserReadModelStore, InMemoryAdminUserReadModelStore>();
+        services.TryAddSingleton<IAdminUserCredentialStore, InMemoryAdminUserCredentialStore>();
         services.TryAddSingleton<IEaIntegrationEventStore, InMemoryEaIntegrationEventStore>();
         services.TryAddSingleton<AdminRequestContextFactory>();
         services.TryAddSingleton<IExpertAdvisorSessionDirectory, InMemoryExpertAdvisorSessionDirectory>();

@@ -2,11 +2,11 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
-using Kopitra.ManagementApi.Application.AdminUsers.Commands;
 using Kopitra.ManagementApi.Application.AdminUsers.Queries;
 using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Domain.AdminUsers;
+using Kopitra.ManagementApi.Infrastructure.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure.Authentication;
 using Kopitra.ManagementApi.Time;
 using Microsoft.Azure.Functions.Worker;
@@ -23,13 +23,13 @@ public sealed class PostOpsConsoleLoginFunction
     private const string DefaultTenantId = "console";
 
     private readonly IQueryDispatcher _queryDispatcher;
-    private readonly ICommandDispatcher _commandDispatcher;
+    private readonly IAdminUserCredentialStore _credentialStore;
     private readonly IClock _clock;
 
-    public PostOpsConsoleLoginFunction(IQueryDispatcher queryDispatcher, ICommandDispatcher commandDispatcher, IClock clock)
+    public PostOpsConsoleLoginFunction(IQueryDispatcher queryDispatcher, IAdminUserCredentialStore credentialStore, IClock clock)
     {
         _queryDispatcher = queryDispatcher;
-        _commandDispatcher = commandDispatcher;
+        _credentialStore = credentialStore;
         _clock = clock;
     }
 
@@ -38,7 +38,7 @@ public sealed class PostOpsConsoleLoginFunction
         operationId: "PostOpsConsoleLogin",
         tags: new[] { "OpsConsole" },
         Summary = "Authenticate console operator",
-        Description = "Authenticates an operator using their admin directory record and issues a development access token.",
+        Description = "Authenticates an operator using their email address and password and issues a development access token.",
         Visibility = OpenApiVisibilityType.Important)]
     [OpenApiRequestBody(
         contentType: "application/json",
@@ -74,29 +74,24 @@ public sealed class PostOpsConsoleLoginFunction
             return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_body", "Request body could not be parsed.", cancellationToken);
         }
 
-        if (payload is null || string.IsNullOrWhiteSpace(payload.Email) || string.IsNullOrWhiteSpace(payload.UserId))
+        if (payload is null || string.IsNullOrWhiteSpace(payload.Email) || string.IsNullOrWhiteSpace(payload.Password))
         {
-            return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_body", "email and userId are required.", cancellationToken);
+            return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_body", "email and password are required.", cancellationToken);
         }
 
+        var trimmedEmail = payload.Email.Trim();
         var users = await _queryDispatcher.DispatchAsync(new ListAdminUsersQuery(tenantId), cancellationToken).ConfigureAwait(false);
-        var match = users.FirstOrDefault(user =>
-            string.Equals(user.Email, payload.Email, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(user.UserId, payload.UserId, StringComparison.OrdinalIgnoreCase));
+        var match = users.FirstOrDefault(user => string.Equals(user.Email, trimmedEmail, StringComparison.OrdinalIgnoreCase));
 
         if (match is null)
         {
-            var provisioned = await _commandDispatcher.DispatchAsync(
-                new ProvisionAdminUserCommand(
-                    tenantId,
-                    payload.UserId.Trim(),
-                    payload.Email.Trim(),
-                    FormatDisplayName(payload),
-                    new[] { AdminUserRole.Operator, AdminUserRole.Supervisor },
-                    "ops-console"),
-                cancellationToken).ConfigureAwait(false);
+            return await request.CreateErrorResponseAsync(HttpStatusCode.Unauthorized, "invalid_credentials", "Invalid email or password.", cancellationToken);
+        }
 
-            match = provisioned;
+        var credential = await _credentialStore.GetAsync(tenantId, trimmedEmail, cancellationToken).ConfigureAwait(false);
+        if (credential is null || !PasswordHasher.VerifyPassword(payload.Password, credential.PasswordHash))
+        {
+            return await request.CreateErrorResponseAsync(HttpStatusCode.Unauthorized, "invalid_credentials", "Invalid email or password.", cancellationToken);
         }
 
         var consoleRoles = match.Roles.Select(MapConsoleRole).Where(role => !string.IsNullOrEmpty(role)).Distinct().ToArray();
@@ -157,23 +152,5 @@ public sealed class PostOpsConsoleLoginFunction
         };
     }
 
-    private static string FormatDisplayName(PostOpsConsoleLoginRequest request)
-    {
-        if (!string.IsNullOrWhiteSpace(request.UserId))
-        {
-            return request.UserId.Trim();
-        }
-
-        var email = request.Email.Trim();
-        var atIndex = email.IndexOf('@');
-        if (atIndex > 0)
-        {
-            var localPart = email.Substring(0, atIndex);
-            return localPart.Replace('.', ' ').Replace('_', ' ').Replace('-', ' ');
-        }
-
-        return email;
-    }
-
-    private sealed record PostOpsConsoleLoginRequest(string UserId, string Email);
+    private sealed record PostOpsConsoleLoginRequest(string Email, string Password);
 }

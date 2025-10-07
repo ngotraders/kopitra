@@ -75,3 +75,4 @@
 - [x] Build a frontend login experience that captures credentials, persists the issued token, and gates protected routes.
 - [x] Wire sign-out flows to clear cached tokens and return operators to the login screen.
 - [x] Add backend and frontend tests covering the new authentication capabilities.
+- [ ] Add password rotation and reset workflows for management operators.

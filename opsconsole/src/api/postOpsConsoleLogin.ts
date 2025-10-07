@@ -6,8 +6,8 @@ import {
 } from './integration/config.ts';
 
 export interface OpsConsoleLoginRequest {
-  userId: string;
   email: string;
+  password: string;
 }
 
 export interface OpsConsoleLoginResponse {
@@ -23,8 +23,8 @@ export async function postOpsConsoleLogin(
   const response = await managementRequest('/opsconsole/login', {
     method: 'POST',
     body: JSON.stringify({
-      userId: request.userId.trim(),
       email: request.email.trim(),
+      password: request.password,
     }),
   });
   await expectManagementOk(response);

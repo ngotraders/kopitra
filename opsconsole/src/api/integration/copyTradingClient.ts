@@ -189,7 +189,6 @@ export function createCopyTradingClient(): CopyTradingClient {
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${opsBearerToken}`,
-        'X-TradeAgent-Account': 'console',
         ...(init.headers ?? {}),
       },
     });
