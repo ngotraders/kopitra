@@ -2,12 +2,21 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from '@storybook/test';
 import App from './App';
 import { withQueryClient } from './test/withQueryClient';
+import type { ConsoleUser } from './types/console.ts';
+
+const sampleUser: ConsoleUser = {
+  id: 'storybook-user',
+  name: 'Storybook Operator',
+  email: 'operator@example.com',
+  roles: ['admin'],
+};
 
 const meta: Meta<typeof App> = {
   component: App,
   title: 'Pages/App',
   args: {
     onSignOut: fn(),
+    initialUser: sampleUser,
   },
   decorators: [withQueryClient],
 };

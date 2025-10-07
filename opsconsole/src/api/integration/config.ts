@@ -1,7 +1,6 @@
 export interface OpsIntegrationConfig {
   managementBaseUrl: string;
   gatewayBaseUrl: string;
-  bearerToken: string;
   tenantId: string;
 }
 
@@ -15,17 +14,21 @@ interface OpsIntegrationGlobals {
   };
 }
 
-type ResolvedIntegrationConfig = Partial<OpsIntegrationConfig>;
+interface ResolvedIntegrationConfig extends Partial<OpsIntegrationConfig> {
+  bearerToken?: string;
+}
 
 let cachedConfig: OpsIntegrationConfig | null = null;
+let cachedEnvBearerToken: string | null = null;
+let runtimeBearerToken: string | null = null;
 
 export function isIntegrationConfigured(): boolean {
-  if (cachedConfig) {
-    return true;
+  try {
+    const config = getIntegrationConfig();
+    return Boolean(config.managementBaseUrl && config.gatewayBaseUrl);
+  } catch {
+    return false;
   }
-
-  const resolved = resolveIntegrationConfig();
-  return Boolean(resolved.managementBaseUrl && resolved.gatewayBaseUrl && resolved.bearerToken);
 }
 
 export function getIntegrationConfig(): OpsIntegrationConfig {
@@ -47,18 +50,26 @@ export function getIntegrationConfig(): OpsIntegrationConfig {
     );
   }
 
-  if (!bearerToken) {
-    throw new Error('OPS_BEARER_TOKEN is not configured.');
-  }
-
   cachedConfig = {
     managementBaseUrl: stripTrailingSlash(managementBaseUrl),
     gatewayBaseUrl: stripTrailingSlash(gatewayBaseUrl),
-    bearerToken,
     tenantId: tenantId ?? 'console',
   };
+  cachedEnvBearerToken = bearerToken?.trim() ? bearerToken.trim() : null;
 
   return cachedConfig;
+}
+
+export function setIntegrationBearerToken(token: string | null) {
+  runtimeBearerToken = token?.trim() ?? null;
+}
+
+export function getIntegrationBearerToken(): string | null {
+  if (!cachedConfig) {
+    getIntegrationConfig();
+  }
+
+  return runtimeBearerToken ?? cachedEnvBearerToken;
 }
 
 export async function managementRequest(path: string, init: RequestInit = {}) {
@@ -67,7 +78,10 @@ export async function managementRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers ?? {});
 
   if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${config.bearerToken}`);
+    const bearerToken = getIntegrationBearerToken();
+    if (bearerToken) {
+      headers.set('Authorization', `Bearer ${bearerToken}`);
+    }
   }
   if (!headers.has('X-TradeAgent-Account')) {
     headers.set('X-TradeAgent-Account', config.tenantId);

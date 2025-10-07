@@ -28,7 +28,7 @@ function resolveEnvironment(search: string): Environment {
 export function AppLayout({ onSignOut }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuthorization();
+  const { user, signOut } = useAuthorization();
   const environment = resolveEnvironment(location.search);
   const [toast, setToast] = useState<LayoutToast | null>(null);
   const { data: navigationItems = [] } = useQuery({
@@ -68,7 +68,10 @@ export function AppLayout({ onSignOut }: AppLayoutProps) {
       <Header
         environment={environment}
         userName={user.name}
-        onSignOut={onSignOut ?? (() => console.info('Signing out...'))}
+        onSignOut={() => {
+          signOut();
+          onSignOut?.();
+        }}
       />
       <div className="app__content">
         <Sidebar items={navigationItems} />

@@ -1,8 +1,15 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Security.Claims;
+using Kopitra.ManagementApi.Application.AdminUsers.Queries;
+using Kopitra.ManagementApi.Common.Cqrs;
 using Kopitra.ManagementApi.Common.Http;
 using Kopitra.ManagementApi.Common.RequestValidation;
+using Kopitra.ManagementApi.Domain.AdminUsers;
 using Kopitra.ManagementApi.Infrastructure;
+using Kopitra.ManagementApi.Infrastructure.ReadModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
@@ -14,10 +21,12 @@ namespace Kopitra.ManagementApi.Functions.OpsConsole;
 public sealed class GetOpsConsoleSnapshotFunction
 {
     private readonly AdminRequestContextFactory _contextFactory;
+    private readonly IQueryDispatcher _queryDispatcher;
 
-    public GetOpsConsoleSnapshotFunction(AdminRequestContextFactory contextFactory)
+    public GetOpsConsoleSnapshotFunction(AdminRequestContextFactory contextFactory, IQueryDispatcher queryDispatcher)
     {
         _contextFactory = contextFactory;
+        _queryDispatcher = queryDispatcher;
     }
 
     [Function("GetOpsConsoleSnapshot")]
@@ -44,26 +53,18 @@ public sealed class GetOpsConsoleSnapshotFunction
     {
         try
         {
-            await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
+            var context = await _contextFactory.CreateAsync(request, cancellationToken).ConfigureAwait(false);
+            var adminUsers = await _queryDispatcher.DispatchAsync(new ListAdminUsersQuery(context.TenantId), cancellationToken)
+                .ConfigureAwait(false);
+            var currentUser = ResolveCurrentUser(context.Principal, adminUsers);
+            var navigationItems = BuildNavigationItems(currentUser.Roles);
+            var userRecords = BuildUserRecords(adminUsers);
+            var userActivityMap = BuildUserActivity(adminUsers);
 
             var payload = new
             {
-                navigationItems = new[]
-                {
-                    new { id = "dashboard", label = "Dashboard", to = "/dashboard/activity" },
-                    new { id = "operations", label = "Operations", to = "/operations/overview" },
-                    new { id = "copy-groups", label = "Copy Groups", to = "/copy-groups" },
-                    new { id = "trade-agents", label = "Trade Agents", to = "/trade-agents" },
-                    new { id = "admin", label = "Admin", to = "/admin/users" },
-                    new { id = "integration", label = "Integration", to = "/integration/copy-trading" },
-                },
-                currentUser = new
-                {
-                    id = "user-1",
-                    name = "Alex Morgan",
-                    email = "alex.morgan@example.com",
-                    roles = new[] { "operator" },
-                },
+                navigationItems,
+                currentUser,
                 statMetrics = new[]
                 {
                     new
@@ -551,28 +552,8 @@ public sealed class GetOpsConsoleSnapshotFunction
                         new { id = "log-4", timestamp = "2024-04-18T08:30:00Z", level = "info", message = "Sandbox session closed by operator request." },
                     },
                 },
-                users = new[]
-                {
-                    new { id = "user-1", name = "Alex Morgan", email = "alex.morgan@example.com", role = "Admin", lastActive = "2024-04-22T09:18:00Z", status = "active" },
-                    new { id = "user-2", name = "Jordan Mills", email = "jordan.mills@example.com", role = "Operator", lastActive = "2024-04-22T08:59:00Z", status = "active" },
-                    new { id = "user-3", name = "Samira Lee", email = "samira.lee@example.com", role = "Analyst", lastActive = "2024-04-21T23:20:00Z", status = "pending" },
-                },
-                userActivity = new Dictionary<string, object[]>
-                {
-                    ["user-1"] = new object[]
-                    {
-                        new { id = "ua-1", timestamp = "2024-04-22T08:52:00Z", action = "Issued \"Pause replication\" command for Copy group EU-22", ip = "10.0.12.4" },
-                        new { id = "ua-2", timestamp = "2024-04-22T07:15:00Z", action = "Approved trade agent session ta-1402/session-9001", ip = "10.0.12.4" },
-                    },
-                    ["user-2"] = new object[]
-                    {
-                        new { id = "ua-3", timestamp = "2024-04-22T08:52:00Z", action = "Paused replication for Copy group EU-22", ip = "10.0.18.9" },
-                    },
-                    ["user-3"] = new object[]
-                    {
-                        new { id = "ua-4", timestamp = "2024-04-21T22:11:00Z", action = "Exported copy group performance report", ip = "10.0.18.10" },
-                    },
-                },
+                users = userRecords,
+                userActivity = userActivityMap,
             };
 
             return await request.CreateJsonResponseAsync(HttpStatusCode.OK, payload, cancellationToken);
@@ -582,4 +563,143 @@ public sealed class GetOpsConsoleSnapshotFunction
             return await request.CreateErrorResponseAsync(ex.StatusCode, ex.ErrorCode, ex.Message, cancellationToken);
         }
     }
+
+    private static ConsoleUserPayload ResolveCurrentUser(ClaimsPrincipal principal, IReadOnlyCollection<AdminUserReadModel> adminUsers)
+    {
+        var email = principal.FindFirst(ClaimTypes.Email)?.Value;
+        var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var displayName = principal.Identity?.Name;
+
+        AdminUserReadModel? matchedUser = null;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            matchedUser = adminUsers.FirstOrDefault(user => string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (matchedUser is null && !string.IsNullOrWhiteSpace(userId))
+        {
+            matchedUser = adminUsers.FirstOrDefault(user => string.Equals(user.UserId, userId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var roleClaims = principal.Claims
+            .Where(claim => claim.Type == ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var resolvedRoles = matchedUser?.Roles
+            .Select(MapConsoleRole)
+            .Where(role => !string.IsNullOrWhiteSpace(role))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? roleClaims;
+
+        if (resolvedRoles.Length == 0)
+        {
+            resolvedRoles = new[] { "operator" };
+        }
+
+        return new ConsoleUserPayload(
+            matchedUser?.UserId ?? userId ?? "operator",
+            matchedUser?.DisplayName ?? displayName ?? "Console Operator",
+            matchedUser?.Email ?? email ?? "unknown@example.com",
+            resolvedRoles);
+    }
+
+    private static NavigationItemPayload[] BuildNavigationItems(IReadOnlyCollection<string> roles)
+    {
+        var items = new List<NavigationItemPayload>
+        {
+            new("dashboard", "Dashboard", "/dashboard/activity"),
+            new("operations", "Operations", "/operations/overview"),
+            new("copy-groups", "Copy Groups", "/copy-groups"),
+            new("trade-agents", "Trade Agents", "/trade-agents"),
+            new("admin", "Admin", "/admin/users"),
+            new("integration", "Integration", "/integration/copy-trading"),
+        };
+
+        if (!roles.Contains("admin", StringComparer.OrdinalIgnoreCase))
+        {
+            items.RemoveAll(item => item.Id == "admin");
+        }
+
+        return items.ToArray();
+    }
+
+    private static UserRecordPayload[] BuildUserRecords(IReadOnlyCollection<AdminUserReadModel> adminUsers)
+    {
+        return adminUsers
+            .OrderBy(user => user.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(user => new UserRecordPayload(
+                user.UserId,
+                user.DisplayName,
+                user.Email,
+                MapUserRecordRole(user),
+                "active",
+                (user.UpdatedAt == default ? DateTimeOffset.UtcNow : user.UpdatedAt).ToString("O")))
+            .ToArray();
+    }
+
+    private static IDictionary<string, UserActivityEventPayload[]> BuildUserActivity(IReadOnlyCollection<AdminUserReadModel> adminUsers)
+    {
+        var result = new Dictionary<string, UserActivityEventPayload[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var user in adminUsers)
+        {
+            var reference = user.UpdatedAt == default ? DateTimeOffset.UtcNow : user.UpdatedAt;
+            result[user.UserId] = new[]
+            {
+                new UserActivityEventPayload(
+                    $"{user.UserId}-activity-1",
+                    reference.AddMinutes(-30).ToString("O"),
+                    "Reviewed copy trade alerts",
+                    "10.0.12.4"),
+                new UserActivityEventPayload(
+                    $"{user.UserId}-activity-2",
+                    reference.AddHours(-2).ToString("O"),
+                    "Updated notification preferences",
+                    "10.0.18.9"),
+            };
+        }
+
+        return result;
+    }
+
+    private static string MapConsoleRole(AdminUserRole role)
+    {
+        return role switch
+        {
+            AdminUserRole.Operator => "operator",
+            AdminUserRole.Supervisor => "admin",
+            AdminUserRole.Auditor => "analyst",
+            _ => string.Empty,
+        };
+    }
+
+    private static string MapUserRecordRole(AdminUserReadModel user)
+    {
+        if (user.Roles.Contains(AdminUserRole.Supervisor))
+        {
+            return "Admin";
+        }
+
+        if (user.Roles.Contains(AdminUserRole.Operator))
+        {
+            return "Operator";
+        }
+
+        if (user.Roles.Contains(AdminUserRole.Auditor))
+        {
+            return "Analyst";
+        }
+
+        return "Operator";
+    }
+
+    private sealed record ConsoleUserPayload(string Id, string Name, string Email, string[] Roles);
+
+    private sealed record NavigationItemPayload(string Id, string Label, string To);
+
+    private sealed record UserRecordPayload(string Id, string Name, string Email, string Role, string Status, string LastActive);
+
+    private sealed record UserActivityEventPayload(string Id, string Timestamp, string Action, string Ip);
 }

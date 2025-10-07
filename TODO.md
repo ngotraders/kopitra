@@ -68,3 +68,10 @@
 - Document broker onboarding procedures, including compliance prerequisites.
 - Create reference diagrams for signal flow, scaling topology, and observability stack.
 - Maintain an API changelog covering release notes and migration guidance.
+
+## Ops Console Activation
+- [x] Implement a management API login endpoint that issues development access tokens for admin users.
+- [x] Update the ops console snapshot to hydrate the current user and admin directory from live read models.
+- [x] Build a frontend login experience that captures credentials, persists the issued token, and gates protected routes.
+- [x] Wire sign-out flows to clear cached tokens and return operators to the login screen.
+- [x] Add backend and frontend tests covering the new authentication capabilities.
