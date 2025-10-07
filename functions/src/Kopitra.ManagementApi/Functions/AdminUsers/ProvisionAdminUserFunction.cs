@@ -53,9 +53,9 @@ public sealed class ProvisionAdminUserFunction
             }
 
             var payload = JsonSerializer.Deserialize<ProvisionAdminUserRequest>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            if (payload is null || string.IsNullOrWhiteSpace(payload.UserId) || string.IsNullOrWhiteSpace(payload.Email) || string.IsNullOrWhiteSpace(payload.DisplayName) || string.IsNullOrWhiteSpace(payload.RequestedBy))
+            if (payload is null || string.IsNullOrWhiteSpace(payload.UserId) || string.IsNullOrWhiteSpace(payload.Email) || string.IsNullOrWhiteSpace(payload.DisplayName) || string.IsNullOrWhiteSpace(payload.RequestedBy) || string.IsNullOrWhiteSpace(payload.Password))
             {
-                return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_request", "userId, email, displayName, and requestedBy are required.", cancellationToken);
+                return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_request", "userId, email, displayName, requestedBy, and password are required.", cancellationToken);
             }
 
             var roles = payload.Roles?.Select(r => Enum.TryParse<AdminUserRole>(r, true, out var role) ? role : (AdminUserRole?)null).ToList();
@@ -64,7 +64,14 @@ public sealed class ProvisionAdminUserFunction
                 return await request.CreateErrorResponseAsync(HttpStatusCode.BadRequest, "invalid_roles", "One or more roles are invalid.", cancellationToken);
             }
 
-            var command = new ProvisionAdminUserCommand(context.TenantId, payload.UserId, payload.Email, payload.DisplayName, roles!.Select(r => r!.Value).ToArray(), payload.RequestedBy);
+            var command = new ProvisionAdminUserCommand(
+                context.TenantId,
+                payload.UserId.Trim(),
+                payload.Email.Trim(),
+                payload.DisplayName.Trim(),
+                roles!.Select(r => r!.Value).ToArray(),
+                payload.RequestedBy.Trim(),
+                payload.Password);
             var readModel = await _commandDispatcher.DispatchAsync(command, cancellationToken);
             return await request.CreateJsonResponseAsync(HttpStatusCode.Created, readModel, cancellationToken);
         }
@@ -83,5 +90,6 @@ public sealed class ProvisionAdminUserFunction
         [property: Required, EmailAddress] string Email,
         [property: Required] string DisplayName,
         [property: Required] string RequestedBy,
+        [property: Required] string Password,
         IReadOnlyCollection<string>? Roles);
 }

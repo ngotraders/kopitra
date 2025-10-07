@@ -1,31 +1,34 @@
 export interface OpsIntegrationConfig {
   managementBaseUrl: string;
   gatewayBaseUrl: string;
-  bearerToken: string;
-  tenantId: string;
 }
 
 interface OpsIntegrationGlobals {
   __OPS_MANAGEMENT_BASE_URL__?: string;
   __OPS_GATEWAY_BASE_URL__?: string;
   __OPS_BEARER_TOKEN__?: string;
-  __OPS_TENANT_ID__?: string;
   process?: {
     env?: Record<string, string | undefined>;
   };
 }
 
-type ResolvedIntegrationConfig = Partial<OpsIntegrationConfig>;
+interface ResolvedIntegrationConfig {
+  managementBaseUrl?: string;
+  gatewayBaseUrl?: string;
+  bearerToken?: string;
+}
 
 let cachedConfig: OpsIntegrationConfig | null = null;
+let cachedEnvBearerToken: string | null = null;
+let runtimeBearerToken: string | null = null;
 
 export function isIntegrationConfigured(): boolean {
-  if (cachedConfig) {
-    return true;
+  try {
+    const config = getIntegrationConfig();
+    return Boolean(config.managementBaseUrl && config.gatewayBaseUrl);
+  } catch {
+    return false;
   }
-
-  const resolved = resolveIntegrationConfig();
-  return Boolean(resolved.managementBaseUrl && resolved.gatewayBaseUrl && resolved.bearerToken);
 }
 
 export function getIntegrationConfig(): OpsIntegrationConfig {
@@ -33,7 +36,7 @@ export function getIntegrationConfig(): OpsIntegrationConfig {
     return cachedConfig;
   }
 
-  const { managementBaseUrl, gatewayBaseUrl, bearerToken, tenantId } = resolveIntegrationConfig();
+  const { managementBaseUrl, gatewayBaseUrl, bearerToken } = resolveIntegrationConfig();
 
   if (!managementBaseUrl) {
     throw new Error(
@@ -47,18 +50,25 @@ export function getIntegrationConfig(): OpsIntegrationConfig {
     );
   }
 
-  if (!bearerToken) {
-    throw new Error('OPS_BEARER_TOKEN is not configured.');
-  }
-
   cachedConfig = {
     managementBaseUrl: stripTrailingSlash(managementBaseUrl),
     gatewayBaseUrl: stripTrailingSlash(gatewayBaseUrl),
-    bearerToken,
-    tenantId: tenantId ?? 'console',
   };
+  cachedEnvBearerToken = bearerToken?.trim() ? bearerToken.trim() : null;
 
   return cachedConfig;
+}
+
+export function setIntegrationBearerToken(token: string | null) {
+  runtimeBearerToken = token?.trim() ?? null;
+}
+
+export function getIntegrationBearerToken(): string | null {
+  if (!cachedConfig) {
+    getIntegrationConfig();
+  }
+
+  return runtimeBearerToken ?? cachedEnvBearerToken;
 }
 
 export async function managementRequest(path: string, init: RequestInit = {}) {
@@ -67,10 +77,10 @@ export async function managementRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers ?? {});
 
   if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${config.bearerToken}`);
-  }
-  if (!headers.has('X-TradeAgent-Account')) {
-    headers.set('X-TradeAgent-Account', config.tenantId);
+    const bearerToken = getIntegrationBearerToken();
+    if (bearerToken) {
+      headers.set('Authorization', `Bearer ${bearerToken}`);
+    }
   }
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json');
@@ -155,11 +165,5 @@ function resolveIntegrationConfig(
       env.OPS_BEARER_TOKEN ??
       env.MANAGEMENT_BEARER_TOKEN ??
       env.BEARER_TOKEN,
-    tenantId:
-      globals.__OPS_TENANT_ID__ ??
-      env.OPS_TENANT_ID ??
-      env.MANAGEMENT_TENANT_ID ??
-      env.TRADE_AGENT_TENANT ??
-      'console',
   };
 }

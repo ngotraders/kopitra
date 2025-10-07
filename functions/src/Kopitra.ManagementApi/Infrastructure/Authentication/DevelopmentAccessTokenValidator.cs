@@ -1,7 +1,7 @@
-using System;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Kopitra.ManagementApi.Infrastructure.Authentication;
 
@@ -11,13 +11,25 @@ public sealed class DevelopmentAccessTokenValidator : IAccessTokenValidator
     {
         if (string.IsNullOrWhiteSpace(token))
         {
-            throw new ArgumentException("Token must be provided.", nameof(token));
+            throw new SecurityTokenException("Token must be provided.");
         }
 
-        var identity = new ClaimsIdentity("Development");
-        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, "dev-user"));
-        identity.AddClaim(new Claim(ClaimTypes.Name, "Development Operator"));
-        var principal = new ClaimsPrincipal(identity);
-        return Task.FromResult(principal);
+        var descriptor = DevelopmentAccessTokenCodec.DecodeToken(token);
+
+        var identity = new ClaimsIdentity(authenticationType: "Development");
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, descriptor.UserId));
+        identity.AddClaim(new Claim(ClaimTypes.Name, descriptor.DisplayName));
+        identity.AddClaim(new Claim(ClaimTypes.Email, descriptor.Email));
+        identity.AddClaim(new Claim("tenant", descriptor.TenantId));
+
+        foreach (var role in descriptor.Roles)
+        {
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                identity.AddClaim(new Claim(ClaimTypes.Role, role));
+            }
+        }
+
+        return Task.FromResult(new ClaimsPrincipal(identity));
     }
 }
