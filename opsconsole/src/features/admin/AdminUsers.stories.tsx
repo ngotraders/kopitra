@@ -1,6 +1,6 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { expect, within } from '@storybook/test';
+import { expect, within } from 'storybook/test';
 import {
   AdminUserActivity,
   AdminUserDetailLayout,
