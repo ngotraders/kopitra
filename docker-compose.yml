@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: kopitra-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "KopitraPassword123!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P KopitraPassword123! -Q 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kopitra-network
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: kopitra-azurite
+    ports:
+      - "10000:10000"  # Blob Storage
+      - "10001:10001"  # Queue Storage
+      - "10002:10002"  # Table Storage
+    environment:
+      - AZURITE_ACCOUNTS=devstoreaccount1:devstorekey1
+    volumes:
+      - azurite_data:/data
+    networks:
+      - kopitra-network
+
+volumes:
+  sqlserver_data:
+    driver: local
+  azurite_data:
+    driver: local
+
+networks:
+  kopitra-network:
+    driver: bridge

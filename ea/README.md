@@ -1,8 +1,8 @@
-# Kopitra2 EA実装ガイド
+# Kopitra EA実装ガイド
 
 ## 概要
 
-**Kopitra2** は、FXコピートレード配信・購読プラットフォーム向けのExpert Advisor（EA）です。配信者の取引をリアルタイムで購読者に配信し、自動的に複数口座で同期・実行するシステムを実現します。
+**Kopitra** は、FXコピートレード配信・購読プラットフォーム向けのExpert Advisor（EA）です。配信者の取引をリアルタイムで購読者に配信し、自動的に複数口座で同期・実行するシステムを実現します。
 
 本EAは以下の特徴を持つ**ポーリングベースの非同期メッセージング アーキテクチャ**に対応：
 - **単一EA対応エンドポイント**: `/api/ea/*` で統一
@@ -12,7 +12,7 @@
 
 ## ファイル構成
 
-**kopitra2/ea/ フォルダ:**
+**kopitra/ea/ フォルダ:**
 - `KopitraLib.mqh` - ライブラリ（MT4/MT5共通、バージョン0.2.0）
 - `KopitraAgent.mq4` - MT4用EA
 - `KopitraAgent.mq5` - MT5用EA
@@ -204,7 +204,7 @@ EAが`POST /api/ea/executions`で送信するデータ構造：
 ## ライブラリ仕様（KopitraLib.mqh）
 
 ### バージョン
-- **0.2.0** （kopitra2対応）
+- **0.2.0** （kopitra対応）
 
 ### 主要構造体
 
@@ -290,7 +290,7 @@ InpEnableOrderSubmission = false                               // 注文送信�
 
 ### パラメータ説明
 
-- **InpApiBaseUrl**: Kopitra2 APIサーバーのベースURL。HTTPSで暗号化通信。
+- **InpApiBaseUrl**: Kopitra APIサーバーのベースURL。HTTPSで暗号化通信。
 - **InpAccountId**: 口座を一意に識別するUUID。サーバーから割り当てられる。
 - **InpAuthMethod**: 認証方式。`account_session_key` が標準。
 - **InpAuthKey**: 認証キー。安全に保管し、本番環境では環境変数から取得推奨。

@@ -1,6 +1,6 @@
 #property strict
 #property version   "0.2.0"
-#property description "Kopitra copy-trading agent for MT4 terminals (kopitra2)"
+#property description "Kopitra copy-trading agent for MT4 terminals (kopitra)"
 #property copyright "Kopitra"
 
 #include "KopitraLib.mqh"
@@ -74,7 +74,7 @@ void KopitraDetectExecutionChanges()
 
 int OnInit()
   {
-   KopitraLogInfo("Initializing KopitraAgent (MT4 - kopitra2)");
+   KopitraLogInfo("Initializing KopitraAgent (MT4 - kopitra)");
    KopitraConfig config;
    KopitraApplyInputConfig(config);
 

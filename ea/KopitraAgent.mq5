@@ -1,6 +1,6 @@
 #property strict
 #property version   "0.2.0"
-#property description "Kopitra copy-trading agent for MT5 terminals (kopitra2)"
+#property description "Kopitra copy-trading agent for MT5 terminals (kopitra)"
 #property copyright "Kopitra"
 
 #include "KopitraLib.mqh"
@@ -36,7 +36,7 @@ void KopitraApplyInputConfig(KopitraConfig &config)
 
 int OnInit()
   {
-   KopitraLogInfo("Initializing KopitraAgent (MT5 - kopitra2)");
+   KopitraLogInfo("Initializing KopitraAgent (MT5 - kopitra)");
    KopitraConfig config;
    KopitraApplyInputConfig(config);
 
