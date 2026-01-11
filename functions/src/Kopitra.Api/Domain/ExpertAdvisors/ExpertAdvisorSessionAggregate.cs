@@ -36,13 +36,13 @@ public class ExpertAdvisorSessionAggregate : AggregateRoot<ExpertAdvisorSessionA
         Emit(new HeartbeatReceivedEvent(Id, createdAt));
     }
 
-    public void Authenticate(DateTimeOffset authenticatedAt)
+    public void Authenticate(DateTimeOffset authenticatedAt, string jwtToken)
     {
         if (_state != SessionState.Idle && _state != SessionState.Pending)
         {
             throw new InvalidOperationException($"Cannot authenticate session in state {_state}");
         }
-        Emit(new SessionAuthenticatedEvent(Id, GenerateJwtToken(), authenticatedAt));
+        Emit(new SessionAuthenticatedEvent(Id, jwtToken, authenticatedAt));
     }
 
     public void RecordHeartbeat(DateTimeOffset receivedAt)
@@ -89,8 +89,5 @@ public class ExpertAdvisorSessionAggregate : AggregateRoot<ExpertAdvisorSessionA
         _state = SessionState.Closed;
     }
 
-    private static string GenerateJwtToken()
-    {
-        return $"token_{Guid.NewGuid():N}";
-    }
+    // JWTs are produced by the application layer (JwtService); keep aggregate focused on state
 }

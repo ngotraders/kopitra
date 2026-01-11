@@ -1,23 +1,34 @@
 using EventFlow.EntityFramework;
+using Kopitra.Api.Application;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Kopitra.Api.Infrastructure;
 
-public class KopitraDbContextProvider : IDbContextProvider<Domain.KopitraDbContext>
+public class KopitraDbContextProvider : IDbContextProvider<KopitraDbContext>
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
 
-    public KopitraDbContextProvider(IServiceProvider serviceProvider)
+    public KopitraDbContextProvider(IConfiguration configuration)
     {
-        _serviceProvider = serviceProvider;
+        _configuration = configuration;
     }
 
-    public Domain.KopitraDbContext CreateContext()
+    public KopitraDbContext CreateContext()
     {
-        var optionsBuilder = new DbContextOptionsBuilder<Domain.KopitraDbContext>();
-        var connectionString = Environment.GetEnvironmentVariable("KopitraDbConnection") 
-            ?? "Server=(localdb)\\mssqllocaldb;Database=kopitra;Trusted_Connection=true;";
+        var optionsBuilder = new DbContextOptionsBuilder<KopitraDbContext>();
+        var connectionString = _configuration.GetConnectionString("KopitraDbConnection")
+            ?? "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=kopitra;Integrated Security=True;";
         optionsBuilder.UseSqlServer(connectionString);
-        return new Domain.KopitraDbContext(optionsBuilder.Options);
+        var context = new KopitraDbContext(optionsBuilder.Options);
+        if (context.Database.IsSqlServer())
+        {
+            context.Database.Migrate();
+        }
+        else
+        {
+            context.Database.EnsureCreated();
+        }
+        return context;
     }
 }

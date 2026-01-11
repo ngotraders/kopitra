@@ -11,17 +11,17 @@ public static class HttpResponseDataExtension
         using var memoryStream = new MemoryStream();
         await response.Body.CopyToAsync(memoryStream).ConfigureAwait(false);
         memoryStream.Seek(0, SeekOrigin.Begin);
-        
+
         using var reader = new StreamReader(memoryStream);
         var body = await reader.ReadToEndAsync().ConfigureAwait(false);
-        
+
         System.Diagnostics.Debug.WriteLine($"[ReadAsJsonAsync] Body content: {body}");
-        
+
         if (string.IsNullOrWhiteSpace(body))
         {
             return default;
         }
-        
+
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

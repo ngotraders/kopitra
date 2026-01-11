@@ -1,0 +1,91 @@
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.Extensions;
+using EventFlow.Extensions;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Kopitra.Api.Application;
+
+public static class ServiceCollectionExtension
+{
+    public static IServiceCollection AddKopitra<TDbContextProvider>(this IServiceCollection services)
+        where TDbContextProvider : class, IDbContextProvider<KopitraDbContext>
+    {
+        return services.AddEventFlow(ef =>
+        {
+            // Users
+            ef.AddEvents(
+                typeof(Domain.Users.Events.UserAdminImpersonationStartedEvent),
+                typeof(Domain.Users.Events.UserDeactivatedEvent),
+                typeof(Domain.Users.Events.UserInfoUpdatedEvent),
+                typeof(Domain.Users.Events.UserLoginEvent),
+                typeof(Domain.Users.Events.UserPermissionsChangedEvent),
+                typeof(Domain.Users.Events.UserProviderRoleDisabledEvent),
+                typeof(Domain.Users.Events.UserProviderRoleEnabledEvent),
+                typeof(Domain.Users.Events.UserReactivatedEvent),
+                typeof(Domain.Users.Events.UserRefreshTokenIssuedEvent),
+                typeof(Domain.Users.Events.UserRegisteredEvent),
+                typeof(Domain.Users.Events.UserSettingsUpdatedEvent),
+                typeof(Domain.Users.Events.UserSubscriberAccountCreatedEvent)
+            );
+            ef.AddCommands(
+                typeof(Users.Commands.ChangeUserPermissionsCommand),
+                typeof(Users.Commands.DeactivateUserCommand),
+                typeof(Users.Commands.EnableProviderCommand),
+                typeof(Users.Commands.IssueRefreshTokenCommand),
+                typeof(Users.Commands.ReactivateUserCommand),
+                typeof(Users.Commands.RecordUserLoginCommand),
+                typeof(Users.Commands.RegisterUserCommand),
+                typeof(Users.Commands.UpdateUserInfoCommand),
+                typeof(Users.Commands.UpdateUserSettingsCommand)
+            );
+            ef.AddCommandHandlers(
+                typeof(Users.Commands.ChangeUserPermissionsCommandHandler),
+                typeof(Users.Commands.DeactivateUserCommandHandler),
+                typeof(Users.Commands.EnableProviderCommandHandler),
+                typeof(Users.Commands.IssueRefreshTokenCommandHandler),
+                typeof(Users.Commands.ReactivateUserCommandHandler),
+                typeof(Users.Commands.RecordUserLoginCommandHandler),
+                typeof(Users.Commands.RegisterUserCommandHandler),
+                typeof(Users.Commands.UpdateUserInfoCommandHandler),
+                typeof(Users.Commands.UpdateUserSettingsCommandHandler)
+            );
+            ef.UseEntityFrameworkReadModel<Users.Queries.UserReadModel, KopitraDbContext>();
+            ef.AddQueryHandlers(
+                typeof(Users.Queries.GetAllUsersQueryHandler),
+                typeof(Users.Queries.GetUserByEmailQueryHandler),
+                typeof(Users.Queries.GetUserByIdQueryHandler),
+                typeof(Users.Queries.GetUserByRefreshTokenQueryHandler)
+            );
+
+
+            // Expert Advisors
+            ef.AddEvents(
+                typeof(Domain.ExpertAdvisors.Events.SessionCreatedEvent),
+                typeof(Domain.ExpertAdvisors.Events.SessionAuthenticatedEvent),
+                typeof(Domain.ExpertAdvisors.Events.HeartbeatReceivedEvent),
+                typeof(Domain.ExpertAdvisors.Events.SessionClosedEvent)
+            );
+            ef.AddCommands(
+                typeof(ExpertAdvisors.Commands.CreateSessionCommand),
+                typeof(ExpertAdvisors.Commands.AuthenticateSessionCommand),
+                typeof(ExpertAdvisors.Commands.RecordHeartbeatCommand),
+                typeof(ExpertAdvisors.Commands.CloseSessionCommand)
+            );
+            ef.AddCommandHandlers(
+                typeof(ExpertAdvisors.Commands.CreateSessionCommandHandler),
+                typeof(ExpertAdvisors.Commands.AuthenticateSessionCommandHandler),
+                typeof(ExpertAdvisors.Commands.RecordHeartbeatCommandHandler),
+                typeof(ExpertAdvisors.Commands.CloseSessionCommandHandler)
+            );
+            ef.UseEntityFrameworkReadModel<ExpertAdvisors.Queries.ExpertAdvisorSessionReadModel, KopitraDbContext>();
+            ef.AddQueryHandlers(
+                typeof(ExpertAdvisors.Queries.GetSessionByIdQueryHandler),
+                typeof(ExpertAdvisors.Queries.GetAllSessionsQueryHandler)
+            );
+
+            ef.ConfigureEntityFramework(EntityFrameworkConfiguration.New);
+            ef.UseEntityFrameworkEventStore<KopitraDbContext>();
+            ef.AddDbContextProvider<KopitraDbContext, TDbContextProvider>();
+        });
+    }
+}

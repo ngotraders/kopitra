@@ -8,9 +8,9 @@ using EventFlow.Commands;
 using EventFlow.Queries;
 using EventFlow;
 using Kopitra.Api.Domain.ExpertAdvisors;
-using Kopitra.Api.Domain.ExpertAdvisors.Commands;
-using Kopitra.Api.Domain.ExpertAdvisors.Queries;
-using Kopitra.Api.Models;
+using Kopitra.Api.Application.ExpertAdvisors.Commands;
+using Kopitra.Api.Application.ExpertAdvisors.Queries;
+using Kopitra.Api.Functions.ExpertAdvisors.Models;
 using System.Net;
 using System.ComponentModel.DataAnnotations;
 
@@ -20,7 +20,7 @@ public class ExpertAdvisorFunctions(ICommandBus commandBus, IQueryProcessor quer
 {
     [Function("CreateSession")]
     [OpenApiOperation(operationId: "CreateSession", tags: new[] { "Sessions" })]
-    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(SessionCreateRequest))]
+    [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(CreateSessionRequest))]
     [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(SessionDetailResponse))]
     public async Task<HttpResponseData> CreateSession(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "ea/sessions")] HttpRequestData req,
@@ -31,8 +31,8 @@ public class ExpertAdvisorFunctions(ICommandBus commandBus, IQueryProcessor quer
 
         try
         {
-            var body = await req.ReadFromJsonAsync<SessionCreateRequest>(token).ConfigureAwait(false);
-            
+            var body = await req.ReadFromJsonAsync<CreateSessionRequest>(token).ConfigureAwait(false);
+
             if (body == null || string.IsNullOrWhiteSpace(body.UserId) || string.IsNullOrWhiteSpace(body.AccountId))
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
@@ -42,7 +42,7 @@ public class ExpertAdvisorFunctions(ICommandBus commandBus, IQueryProcessor quer
 
             var sessionId = ExpertAdvisorSessionId.New;
             var command = new CreateSessionCommand(sessionId) { UserId = body.UserId, AccountId = body.AccountId };
-            
+
             await commandBus.PublishAsync(command, token).ConfigureAwait(false);
 
             var readModel = await queryProcessor.ProcessAsync(new GetSessionByIdQuery(sessionId.Value), token).ConfigureAwait(false);
@@ -95,7 +95,7 @@ public class ExpertAdvisorFunctions(ICommandBus commandBus, IQueryProcessor quer
                 LastHeartbeatAt = rm.LastHeartbeatAt,
                 ExpiresAt = rm.ExpiresAt
             });
-            
+
             await response.WriteAsJsonAsync(sessionResponses, token).ConfigureAwait(false);
             return response;
         }

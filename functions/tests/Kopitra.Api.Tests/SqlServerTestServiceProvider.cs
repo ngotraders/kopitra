@@ -1,7 +1,7 @@
-using Kopitra.Api.Domain;
 using Kopitra.Api.Infrastructure;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
+using Kopitra.Api.Application;
 
 namespace Kopitra.Api.Tests;
 
@@ -18,7 +18,7 @@ public static class SqlServerTestServiceProvider
         services.AddLogging();
 
         var connectionString = Environment.GetEnvironmentVariable("KopitraDbConnection");
-        
+
         if (string.IsNullOrEmpty(connectionString))
         {
             // InMemoryDatabase にフォールバック
@@ -41,7 +41,7 @@ public static class SqlServerTestServiceProvider
         }
 
         services.AddKopitra<TestDbContextProvider>();
-        services.AddSingleton<Functions.ExpertAdvisorFunctions>();
+        // services.AddSingleton<Functions.ExpertAdvisorFunctions>();
         var serviceProvider = services.BuildServiceProvider();
 
         // データベース初期化

@@ -1,7 +1,7 @@
-using Kopitra.Api.Domain;
 using Kopitra.Api.Infrastructure;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
+using Kopitra.Api.Application;
 
 namespace Kopitra.Api.Tests;
 
@@ -26,29 +26,29 @@ public static class TestServiceProvider
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        
+
         // Use in-memory database for testing
         var dbOptions = new DbContextOptionsBuilder<KopitraDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-        
+
         // Register DbContextOptions so TestDbContextProvider can receive it
         services.AddSingleton(dbOptions);
-        
+
         // Register the provider instance explicitly, like strattrack does
         services.AddSingleton<TestDbContextProvider>();
-        
+
         // Let AddKopitra register the provider
         services.AddKopitra<TestDbContextProvider>();
-        services.AddSingleton<Functions.ExpertAdvisorFunctions>();
+        // services.AddSingleton<Functions.ExpertAdvisorFunctions>();
         var serviceProvider = services.BuildServiceProvider();
-        
+
         // Initialize database
         var context = serviceProvider.GetRequiredService<IDbContextProvider<KopitraDbContext>>().CreateContext();
         context.Database.EnsureDeleted();
         context.Database.EnsureCreated();
         context.Dispose();
-        
+
         return serviceProvider;
     }
 }

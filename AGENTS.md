@@ -93,29 +93,9 @@ kopitra2/
 │   ├── admin-site/                    # Admin dashboard (admin.kopitra.com)
 │   └── user-site/                     # User dashboard (app.kopitra.com)
 ├── functions/                         # Azure Functions backend
-│   ├── AGENTS.md                      # Backend implementation guidelines
-│   ├── shared/                        # Shared utilities and types
-│   ├── api/                           # REST API implementations
-│   │   ├── auth/
-│   │   ├── accounts/
-│   │   ├── signals/
-│   │   ├── subscriptions/
-│   │   ├── orders/
-│   │   ├── metrics/
-│   │   ├── admin/
-│   │   └── ea/                        # EA-specific endpoints
-│   ├── services/                      # Business logic layer
-│   │   ├── EventSourcingService.cs
-│   │   ├── MetricsService.cs
-│   │   ├── SignalService.cs
-│   │   └── ...
-│   └── data/                          # Data access layer
-│       ├── EventStore.cs
-│       ├── SignalMessageQueue.cs
-│       └── ...
+│   └── AGENTS.md                      # Backend implementation guidelines
 └── infrastructure/                    # Infrastructure as Code
-    ├── AGENTS.md                      # Infrastructure deployment guidelines
-    └── bicep/                         # Bicep templates for Azure resources
+    └── AGENTS.md                      # Infrastructure deployment guidelines
 ```
 
 ---
@@ -169,6 +149,9 @@ Whenever you modify the system design, API contracts, data models, or any archit
 - **Data Access**: Keep database operations in `functions/data/`
 - **API Handlers**: Minimal logic in function implementations
 - **Testing**: Unit tests alongside source files
+
+### AGENTS.md Content Policy
+- **Full code examples required**: When AGENTS.md or any AGENTS.* guidance contains sample implementations or patterns, include complete, copy-paste runnable code snippets (types, method bodies, and any registration or wiring needed). AI agents must not leave only skeletons; provide full working examples consistent with the repository's conventions.
 
 ### API Design Principles
 - **Unified Base Path**: All endpoints follow RESTful conventions
