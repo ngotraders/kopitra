@@ -41,19 +41,84 @@
   - ユーザーサイトでは、ログイン中のユーザーのデータのみアクセス可能
 
 ### 2.2 口座管理
-- **対応プラットフォーム**
-  - MetaTrader 4（MT4）
-  - MetaTrader 5（MT5）
 
-- **口座情報管理**
-  - 口座番号、サーバー情報の登録
-  - 口座の有効性確認（接続テスト）
-  - 複数口座の管理対応
+#### 2.2.1 対応プラットフォーム
+- MetaTrader 4（MT4）
+- MetaTrader 5（MT5）
 
-- **EA（Expert Advisor）連携**
-  - EA経由での口座情報の自動送信（残高、ポジション、取引履歴など）
-  - EAからの注文実行コマンド受信
-  - リアルタイムデータ同期
+#### 2.2.2 口座情報管理
+- **登録情報**
+  - 口座タイプ（MT4/MT5）
+  - ブローカー名
+  - 口座番号
+  - サーバー情報
+  - API認証情報（API Key、API Secretなど）
+
+- **口座有効性確認**
+  - 登録後、ブローカーへの接続テスト実施
+  - 接続成功時に口座ステータスを「接続済」に更新
+  - 接続失敗時はエラー情報を記録し、ユーザーに通知
+
+- **複数口座の管理**
+  - ユーザーは複数の口座を登録可能
+  - 口座ごとに独立した管理（配信用/購読用の役割分担が可能）
+
+#### 2.2.3 口座登録フロー
+
+**フロー1: 事前設定型（Pre-configured）**
+1. ユーザーがWEB画面から口座情報を入力・登録
+   - 口座タイプ（MT4/MT5）
+   - ブローカー名
+   - 口座番号
+   - サーバー情報
+   - API認証情報（必要に応じて）
+2. システムが入力情報を検証し、登録完了
+3. ユーザーが MT4/MT5 に同じ口座情報でEAをセットアップ
+4. EA起動時、登録済み口座情報と照合して認識
+   - EA内部で設定された口座番号・サーバー名がシステム登録情報と一致することを確認
+5. 一致確認後、EAが「接続テスト」を実施（ブローカー接続確認）
+6. 接続成功 → 口座ステータス更新 → 配信・購読可能な状態
+
+**フロー2: EA主導型（EA-Initiated with Activation Code）**
+1. EA が MT4/MT5 で起動される
+2. EA が起動時に以下の情報をサーバーに送信
+   - ブローカー名（MT4/MT5で検出）
+   - 口座番号（MT4/MT5で検出）
+   - サーバー情報（MT4/MT5で検出）
+3. サーバーが一意の **アクティベーションコード** を生成
+   - アクティベーションコード = ユーザーが入力可能な短い英数字コード（例: `ABC123XYZ`）
+   - コードの有効期限: 10分～24時間の設定可能な範囲
+   - コードはEAのコメントに表示、またはターミナルに出力
+4. ユーザーが表示されたアクティベーションコードをコピー
+5. WEB画面でアクティベーションコードを入力
+   - または、以下の口座情報を入力（コード入力と同等の扱い）
+     - ブローカー名
+     - 口座番号
+     - サーバー名
+   - **フロー2のコード入力と口座情報入力は同等の機能** として扱い、どちらか一方で登録可能
+6. システムが以下を実行
+   - コード or 口座情報がEA送信データと一致するか確認
+   - 一致確認 → 口座を当該ユーザーに紐づけ
+   - 口座ステータス = 「接続テスト待ち」
+7. EA側で接続テストを実施（自動または手動トリガー）
+   - ブローカー接続確認
+   - 接続成功 → システムに報告
+8. システムが口座ステータスを「接続済」に更新 → 配信・購読可能
+
+#### 2.2.4 EA（Expert Advisor）連携
+- **EA経由での情報送信**
+  - 口座情報の自動検出・送信（起動時、定期的）
+  - 残高、ポジション、取引履歴などのリアルタイム同期
+  - 接続テスト結果の報告
+
+- **EAからの注文実行**
+  - シグナル受信→注文実行の自動処理
+  - 約定結果をシステムに報告
+
+- **リアルタイムデータ同期**
+  - EA側で定期的（1～5秒間隔で設定可能）にサーバーをポーリング
+  - 新着シグナルの取得
+  - 残高・ポジション情報の更新報告
 
 ### 2.3 コピートレード機能
 - **機能の概念**
@@ -379,13 +444,37 @@ EA Polling Flow:
 - accountId (PK)
 - userId (FK)
 - brokerType (MT4 / MT5)
+- brokerName
 - accountNumber
 - serverName
-- apiKey / apiSecret
+- apiKey / apiSecret (オプション)
 - balance (キャッシュ)
 - lastSyncedAt
 - isConnected
+- connectionStatus (NotConnected / Connected / TestPending)
 - createdAt
+- updatedAt
+- isDeleted (Soft delete)
+```
+
+#### ActivationCode（アクティベーションコード - フロー2用）
+```
+- activationCodeId (PK)
+- code (一意のコード: ABC123XYZ 形式)
+- brokerName
+- accountNumber
+- serverName
+- userId (FK - 紐づけるユーザーID)
+- status (Pending / Confirmed / Expired / Used)
+- expiresAt (有効期限)
+- confirmedAt (確定時刻)
+- createdAt
+- Notes:
+  - 有効期限: 10分～24時間（設定可能）
+  - 確定時に userId が設定され、Account レコードが作成される
+  - コード入力と口座情報入力の両方をサポート
+    - コード入力の場合: code フィールドでマッチング
+    - 口座情報入力の場合: brokerName + accountNumber + serverName でマッチング
 ```
 
 #### ProviderProfile（配信プロフィール）
@@ -572,12 +661,34 @@ EA Polling Flow:
 - `DELETE /api/users/{userId}` - ユーザー削除（権限チェック: Admin のみ）
 
 ### 6.2 口座管理
+
+#### 6.2.1 口座登録・管理
 - `POST /api/accounts` - 口座登録（権限チェック: 対象ユーザー or Admin）
+  - リクエストボディ: `{brokerType, brokerName, accountNumber, serverName, apiKey?, apiSecret?}`
+  - フロー1での使用
 - `GET /api/accounts` - 口座一覧取得（権限チェック: 自分のアカウント or Admin）
 - `GET /api/accounts/{accountId}` - 口座詳細取得（権限チェック: 所有者 or Admin）
 - `PUT /api/accounts/{accountId}` - 口座情報更新（権限チェック: 所有者 or Admin）
+  - 更新可能項目: ブローカー名、API認証情報など
 - `DELETE /api/accounts/{accountId}` - 口座削除（権限チェック: 所有者 or Admin）
 - `POST /api/accounts/{accountId}/verify` - 口座接続テスト（権限チェック: 所有者 or Admin）
+  - 手動トリガー（EA側での接続テスト結果をもとに手動実行）
+
+#### 6.2.2 アクティベーションコード（フロー2用）
+- `POST /api/accounts/activation/initiate` - アクティベーション初期化（フロー2開始）
+  - リクエストボディ: `{brokerName, accountNumber, serverName}` (EA送信情報)
+  - レスポンス: `{activationCode, expiresAt}`
+  - システムがアクティベーションコードを生成・返却
+  - 有効期限: 10分～24時間（設定可能）
+
+- `POST /api/accounts/activation/confirm` - アクティベーション確定
+  - リクエストボディ: `{activationCode}` または `{brokerName, accountNumber, serverName}`
+  - ユーザーが以下いずれかの方法で確定可能
+    - **コード入力**: アクティベーションコードを入力して確定
+    - **口座情報入力**: ブローカー名、口座番号、サーバー名を入力して確定（コード入力と同等）
+  - システムが対応するEA送信データとマッチング
+  - 権限チェック: 対象ユーザー or Admin
+  - レスポンス: 登録された口座情報 + ステータス「接続テスト待ち」
 
 ### 6.3 配信機能
 - `GET /api/providers` - 配信権を持つユーザー一覧検索（権限チェック: 全員）
@@ -661,6 +772,84 @@ EA Polling Flow:
 ---
 
 ## 8. ユースケース
+
+### UC0: 口座登録フロー
+
+#### UC0.1: フロー1 - 事前設定型（Pre-configured Account Registration）
+1. ユーザーがユーザーサイト（app.kopitra.com）にログイン
+2. 「アカウント管理」> 「新規口座追加」をクリック
+3. 登録フォームで以下を入力
+   - 口座タイプ: MT4 / MT5 を選択
+   - ブローカー名: 例「ICMarkets」
+   - 口座番号: 例「123456789」
+   - サーバー情報: 例「ICMarketsDemoCents」
+   - API認証情報（必要に応じて）
+4. 「登録」をクリック → API `POST /api/accounts` にリクエスト
+5. サーバー側の処理
+   - ユーザーID の検証（JWT トークンから取得）
+   - 入力値の検証（必須項目、形式チェック）
+   - Account レコードを作成、ステータス = 「接続テスト待ち」
+   - レスポンス: 登録済み口座情報 + accountId
+6. ユーザーが MT4/MT5 クライアントを開き、同じ口座情報でEAをセットアップ
+7. EA起動時、EAが以下を確認
+   - MT4/MT5 の口座番号、サーバー名、ブローカー名を自動検出
+   - システム登録済み情報と一致するか照合
+   - 一致 → 接続テスト実施、サーバーに接続結果を報告
+8. サーバーが接続テスト成功を受信 → 口座ステータス = 「接続済」
+9. ユーザーサイトで口座ステータスが「接続済」に更新されて表示
+
+#### UC0.2: フロー2 - EA主導型（EA-Initiated with Activation Code）
+**シナリオA: アクティベーションコード入力による登録**
+
+1. ユーザーが事前準備なく、MT4/MT5 に EA をセットアップして起動
+2. EA が起動時にブローカー情報を自動検出
+   - ブローカー名、口座番号、サーバー情報を取得
+3. EA がサーバーに以下を送信
+   - API: `POST /api/accounts/activation/initiate`
+   - リクエストボディ: `{brokerName, accountNumber, serverName}`
+4. サーバー側の処理
+   - アクティベーションコード（例: ABC123XYZ）を生成
+   - ActivationCode レコードを作成、ステータス = 「Pending」
+   - 有効期限を設定（デフォルト: 1時間）
+   - レスポンス: `{activationCode: "ABC123XYZ", expiresAt: "2026-01-12T10:30:00Z"}`
+5. EA がアクティベーションコードをターミナルに表示
+   - 例：「Activation Code: ABC123XYZ（有効期限: 10:30 UTC）」
+6. ユーザーがコードをコピーし、ユーザーサイトで「アカウント登録」> 「フロー2」を選択
+7. 「アクティベーションコードを入力」フィールドにコードを貼り付け
+8. 「確認」をクリック → API `POST /api/accounts/activation/confirm` にリクエスト
+   - リクエストボディ: `{activationCode: "ABC123XYZ"}`
+9. サーバー側の処理
+   - ActivationCode レコードを検索（code = "ABC123XYZ"）
+   - 有効期限内か確認、ステータス確認
+   - コードに対応する brokerName, accountNumber, serverName を取得
+   - Account レコードを作成（userId = ログイン中のユーザー）
+   - ActivationCode ステータス = 「Confirmed」に更新
+   - レスポンス: 作成された Account の詳細情報
+10. EA 側で接続テストを実施（自動または手動トリガー）
+11. 接続成功 → サーバーに報告
+12. サーバーが口座ステータス = 「接続済」に更新
+
+**シナリオB: 口座情報直接入力による登録**
+
+1. ユーザーが EA 起動後、ユーザーサイトで「アカウント登録」> 「フロー2」を選択
+2. アクティベーションコードの代わりに、以下を入力（手動）
+   - ブローカー名: EA が表示した値と同じ（例「ICMarkets」）
+   - 口座番号: EA が表示した値と同じ（例「123456789」）
+   - サーバー情報: EA が表示した値と同じ（例「ICMarketsDemoCents」）
+3. 「確認」をクリック → API `POST /api/accounts/activation/confirm` にリクエスト
+   - リクエストボディ: `{brokerName, accountNumber, serverName}`
+4. サーバー側の処理
+   - 同じ brokerName + accountNumber + serverName を持つ ActivationCode を検索
+   - 有効期限内の Pending コードが存在するか確認
+   - 存在 → Account レコードを作成
+   - ActivationCode ステータス = 「Used」に更新
+   - レスポンス: 作成された Account の詳細情報
+5. 以降は シナリオA と同じ（接続テスト実施 → ステータス更新）
+
+**備考: コード有効期限切れ時の再操作**
+- ユーザーがアクティベーションコードを入力し忘れて有効期限が切れた場合
+- EA を再度起動 → 新しいアクティベーションコードが生成される
+- 過去の ActivationCode ステータス = 「Expired」に自動更新
 
 ### UC1: 配信権ユーザーの取引をEA経由で自動配信
 1. 配信権を持つユーザーがMT4/MT5で新規注文を発注
