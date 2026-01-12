@@ -14,7 +14,6 @@ public class UserReadModel : IReadModel,
     IAmReadModelFor<UserAggregate, UserId, UserProviderRoleDisabledEvent>,
     IAmReadModelFor<UserAggregate, UserId, UserDeactivatedEvent>,
     IAmReadModelFor<UserAggregate, UserId, UserSubscriberAccountCreatedEvent>,
-    IAmReadModelFor<UserAggregate, UserId, UserRefreshTokenIssuedEvent>,
     IAmReadModelFor<UserAggregate, UserId, UserInfoUpdatedEvent>,
     IAmReadModelFor<UserAggregate, UserId, UserPermissionsChangedEvent>,
     IAmReadModelFor<UserAggregate, UserId, UserReactivatedEvent>,
@@ -30,8 +29,6 @@ public class UserReadModel : IReadModel,
     public bool CanSubscribe { get; set; } = true;
     public DateTimeOffset RegisteredAt { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
-    public string? RefreshToken { get; set; }
-    public DateTimeOffset? RefreshTokenExpiresAt { get; set; }
     public DateTimeOffset? LastAdminChangeAt { get; set; }
     public string? LastAdminChangeType { get; set; }
 
@@ -61,12 +58,14 @@ public class UserReadModel : IReadModel,
 
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserProviderRoleEnabledEvent> domainEvent, CancellationToken cancellationToken)
     {
+        CanProvide = true;
         Roles = Roles.Append("Provider").Distinct().ToArray();
         return Task.CompletedTask;
     }
 
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserProviderRoleDisabledEvent> domainEvent, CancellationToken cancellationToken)
     {
+        CanProvide = false;
         Roles = Roles.Where(r => r != "Provider").ToArray();
         return Task.CompletedTask;
     }
@@ -74,19 +73,13 @@ public class UserReadModel : IReadModel,
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserDeactivatedEvent> domainEvent, CancellationToken cancellationToken)
     {
         IsActive = false;
+        LastAdminChangeAt = domainEvent.Timestamp;
+        LastAdminChangeType = "Deactivated";
         return Task.CompletedTask;
     }
 
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserSubscriberAccountCreatedEvent> domainEvent, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
-    }
-
-    public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserRefreshTokenIssuedEvent> domainEvent, CancellationToken cancellationToken)
-    {
-        var e = domainEvent.AggregateEvent;
-        RefreshToken = e.RefreshToken;
-        RefreshTokenExpiresAt = domainEvent.Timestamp;
         return Task.CompletedTask;
     }
 
@@ -107,12 +100,16 @@ public class UserReadModel : IReadModel,
             CanProvide = e.CanProvide.Value;
         if (e.CanSubscribe.HasValue)
             CanSubscribe = e.CanSubscribe.Value;
+        LastAdminChangeAt = domainEvent.Timestamp;
+        LastAdminChangeType = "PermissionsChanged";
         return Task.CompletedTask;
     }
 
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserReactivatedEvent> domainEvent, CancellationToken cancellationToken)
     {
         IsActive = true;
+        LastAdminChangeAt = domainEvent.Timestamp;
+        LastAdminChangeType = "Reactivated";
         return Task.CompletedTask;
     }
 

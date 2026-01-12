@@ -111,12 +111,34 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     /// <summary>
     /// Issue refresh token for this user
     /// </summary>
-    public void IssueRefreshToken(string refreshToken, DateTime expiresAt)
+    public void IssueRefreshToken(string sessionId, string refreshToken, DateTime expiresAt)
     {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("Session id is required.", nameof(sessionId));
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new ArgumentException("Refresh token id is required.", nameof(refreshToken));
+
         if (!IsActive) throw new InvalidOperationException("User is not active.");
+
         Emit(new UserRefreshTokenIssuedEvent
         {
+            SessionId =sessionId, 
             RefreshToken = refreshToken,
+            ExpiresAt = expiresAt,
+        });
+    }
+
+    /// <summary>
+    /// Invalidate current refresh tokens for this user
+    /// </summary>
+    public void RevokeRefreshToken(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("Session id is required.", nameof(sessionId));
+
+        Emit(new UserRefreshTokenRevokedEvent()
+        {
+            SessionId = sessionId,
         });
     }
 
@@ -246,5 +268,10 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     public void Apply(UserAdminImpersonationStartedEvent domainEvent)
     {
         // Event is recorded for audit trail
+    }
+
+    public void Apply(UserRefreshTokenRevokedEvent domainEvent)
+    {
+        // no in-memory state to update currently; token revocation is persisted elsewhere
     }
 }

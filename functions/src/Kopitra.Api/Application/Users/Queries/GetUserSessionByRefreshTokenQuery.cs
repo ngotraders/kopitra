@@ -2,11 +2,11 @@
 
 namespace Kopitra.Api.Application.Users.Queries;
 
-public class GetUserByRefreshTokenQuery : IQuery<UserReadModel>
+public class GetUserSessionByRefreshTokenQuery : IQuery<UserSessionReadModel?>
 {
     public string RefreshToken { get; }
 
-    public GetUserByRefreshTokenQuery(string refreshToken)
+    public GetUserSessionByRefreshTokenQuery(string refreshToken)
     {
         RefreshToken = refreshToken;
     }

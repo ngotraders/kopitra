@@ -12,12 +12,21 @@ public class KopitraDbContext : DbContext
     {
     }
 
-    public DbSet<ExpertAdvisorSessionReadModel> ExpertAdvisorSessions { get; set; }
     public DbSet<UserReadModel> Users { get; set; }
+    public DbSet<UserSessionReadModel> UserSessions { get; set; }
+    public DbSet<ExpertAdvisorSessionReadModel> ExpertAdvisorSessions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.AddEventFlowEvents();
         modelBuilder.AddEventFlowSnapshots();
+
+        modelBuilder.Entity<UserReadModel>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
+        modelBuilder.Entity<UserSessionReadModel>()
+            .HasIndex(u => u.SessionId);
+        modelBuilder.Entity<UserSessionReadModel>()
+            .HasIndex(u => u.RefreshToken);
     }
 }

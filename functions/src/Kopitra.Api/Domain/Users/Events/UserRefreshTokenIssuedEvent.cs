@@ -9,4 +9,6 @@ namespace Kopitra.Api.Domain.Users.Events;
 public class UserRefreshTokenIssuedEvent : AggregateEvent<UserAggregate, UserId>
 {
     public string RefreshToken { get; set; } = null!;
+    public string SessionId { get; set; } = null!;
+    public DateTime ExpiresAt { get; set; }
 }

@@ -33,7 +33,7 @@ public static class HttpRequestDataExtensions
     /// <summary>
     /// Helper method to extract user ID from JWT token
     /// </summary>
-    public static UserId? ExtractUserIdFromToken(this HttpRequestData req)
+    public static TokenValues? ExtractJwtTokenValues(this HttpRequestData req)
     {
         var authHeader = req.Headers.FirstOrDefault(h => h.Key.ToLowerInvariant() == "authorization").Value?.First();
         if (string.IsNullOrWhiteSpace(authHeader))
@@ -43,8 +43,19 @@ public static class HttpRequestDataExtensions
         var handler = new JwtSecurityTokenHandler();
         var jsonToken = handler.ReadToken(jwtToken) as JwtSecurityToken;
         var sub = jsonToken?.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+        var sessionId = jsonToken?.Claims.FirstOrDefault(c => c.Type == "sessionId")?.Value;
         if (string.IsNullOrWhiteSpace(sub))
             return null;
-        return UserId.With(sub);
+        return new TokenValues()
+        {
+            UserId = UserId.With(sub),
+            SessionId = sessionId,
+        };
     }
+}
+
+public class TokenValues
+{
+    public UserId UserId { get; set; } = null!;
+    public string? SessionId { get; set; }
 }

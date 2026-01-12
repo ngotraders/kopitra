@@ -23,6 +23,7 @@ public static class ServiceCollectionExtension
                 typeof(Domain.Users.Events.UserProviderRoleEnabledEvent),
                 typeof(Domain.Users.Events.UserReactivatedEvent),
                 typeof(Domain.Users.Events.UserRefreshTokenIssuedEvent),
+                typeof(Domain.Users.Events.UserRefreshTokenRevokedEvent),
                 typeof(Domain.Users.Events.UserRegisteredEvent),
                 typeof(Domain.Users.Events.UserSettingsUpdatedEvent),
                 typeof(Domain.Users.Events.UserSubscriberAccountCreatedEvent)
@@ -35,6 +36,7 @@ public static class ServiceCollectionExtension
                 typeof(Users.Commands.ReactivateUserCommand),
                 typeof(Users.Commands.RecordUserLoginCommand),
                 typeof(Users.Commands.RegisterUserCommand),
+                typeof(Users.Commands.RevokeRefreshTokenCommand),
                 typeof(Users.Commands.UpdateUserInfoCommand),
                 typeof(Users.Commands.UpdateUserSettingsCommand)
             );
@@ -46,17 +48,21 @@ public static class ServiceCollectionExtension
                 typeof(Users.Commands.ReactivateUserCommandHandler),
                 typeof(Users.Commands.RecordUserLoginCommandHandler),
                 typeof(Users.Commands.RegisterUserCommandHandler),
+                typeof(Users.Commands.RevokeRefreshTokenCommandHandler),
                 typeof(Users.Commands.UpdateUserInfoCommandHandler),
                 typeof(Users.Commands.UpdateUserSettingsCommandHandler)
             );
             ef.UseEntityFrameworkReadModel<Users.Queries.UserReadModel, KopitraDbContext>();
+            ef.UseEntityFrameworkReadModel<Users.Queries.UserSessionReadModel, KopitraDbContext, Users.Queries.UserSessionReadModelLocator>();
+            ef.RegisterServices(rs => rs.AddTransient<Users.Queries.UserSessionReadModelLocator>());
             ef.AddQueryHandlers(
                 typeof(Users.Queries.GetAllUsersQueryHandler),
                 typeof(Users.Queries.GetUserByEmailQueryHandler),
                 typeof(Users.Queries.GetUserByIdQueryHandler),
-                typeof(Users.Queries.GetUserByRefreshTokenQueryHandler)
+                typeof(Users.Queries.GetUsersByRoleQueryHandler),
+                typeof(Users.Queries.GetUserSessionByRefreshTokenQueryHandler),
+                typeof(Users.Queries.GetUserSessionBySessionIdQueryHandler)
             );
-
 
             // Expert Advisors
             ef.AddEvents(

@@ -1,4 +1,3 @@
-using Kopitra.Api.Infrastructure;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Kopitra.Api.Application;
@@ -42,12 +41,6 @@ public static class TestServiceProvider
         services.AddKopitra<TestDbContextProvider>();
         // services.AddSingleton<Functions.ExpertAdvisorFunctions>();
         var serviceProvider = services.BuildServiceProvider();
-
-        // Initialize database
-        var context = serviceProvider.GetRequiredService<IDbContextProvider<KopitraDbContext>>().CreateContext();
-        context.Database.EnsureDeleted();
-        context.Database.EnsureCreated();
-        context.Dispose();
 
         return serviceProvider;
     }

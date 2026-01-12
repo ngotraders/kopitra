@@ -23,17 +23,20 @@ public class UsersFunctions
 {
     private readonly ICommandBus _commandBus;
     private readonly IQueryProcessor _queryProcessor;
+    private readonly IHttpRequestDataAccessor _requestDataAccessor;
     private readonly IAuthorizationService _authorizationService;
     private readonly IPasswordHasher _passwordHasher;
 
     public UsersFunctions(
     ICommandBus commandBus,
     IQueryProcessor queryProcessor,
+    IHttpRequestDataAccessor requestDataAccessor,
     IAuthorizationService authorizationService,
     IPasswordHasher passwordHasher)
     {
         _commandBus = commandBus;
         _queryProcessor = queryProcessor;
+        _requestDataAccessor = requestDataAccessor;
         _authorizationService = authorizationService;
         _passwordHasher = passwordHasher;
     }
@@ -54,14 +57,15 @@ public class UsersFunctions
     {
         try
         {
-            var userId = req.ExtractUserIdFromToken();
-            if (userId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            var query = new GetUserByIdQuery(userId);
+            var query = new GetUserByIdQuery(tokenValues.UserId);
             var user = await _queryProcessor.ProcessAsync(query, CancellationToken.None);
 
             if (!user.IsActive)
@@ -92,6 +96,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -109,14 +117,15 @@ public class UsersFunctions
     {
         try
         {
-            var requestingUserId = req.ExtractUserIdFromToken();
-            if (requestingUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(requestingUserId))
+            if (!_authorizationService.IsAdmin(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -147,6 +156,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -166,15 +179,16 @@ public class UsersFunctions
     {
         try
         {
-            var requestingUserId = req.ExtractUserIdFromToken();
-            if (requestingUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
             var targetUserId = new UserId(userId);
-            if (!_authorizationService.CanViewUser(requestingUserId, targetUserId))
+            if (!_authorizationService.CanViewUser(tokenValues.UserId, targetUserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -205,6 +219,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -224,15 +242,16 @@ public class UsersFunctions
     {
         try
         {
-            var requestingUserId = req.ExtractUserIdFromToken();
-            if (requestingUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
             var targetUserId = new UserId(userId);
-            if (!_authorizationService.CanManageUser(requestingUserId, targetUserId))
+            if (!_authorizationService.CanManageUser(tokenValues.UserId, targetUserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -264,6 +283,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -282,14 +305,15 @@ public class UsersFunctions
     {
         try
         {
-            var requestingUserId = req.ExtractUserIdFromToken();
-            if (requestingUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(requestingUserId))
+            if (!_authorizationService.IsAdmin(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -327,6 +351,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -346,14 +374,15 @@ public class UsersFunctions
     {
         try
         {
-            var adminUserId = req.ExtractUserIdFromToken();
-            if (adminUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(adminUserId))
+            if (!_authorizationService.IsAdmin(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -386,6 +415,10 @@ public class UsersFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -405,14 +438,15 @@ public class UsersFunctions
     {
         try
         {
-            var adminUserId = req.ExtractUserIdFromToken();
-            if (adminUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(adminUserId))
+            if (!_authorizationService.IsAdmin(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -432,7 +466,7 @@ public class UsersFunctions
             {
                 var cmd = new ReactivateUserCommand(targetUserId)
                 {
-                    AdminUserId = adminUserId,
+                    AdminUserId = tokenValues.UserId,
                     Memo = body.Memo
                 };
                 await _commandBus.PublishAsync(cmd, CancellationToken.None);
@@ -441,7 +475,7 @@ public class UsersFunctions
             {
                 var cmd = new DeactivateUserCommand(targetUserId)
                 {
-                    AdminUserId = adminUserId,
+                    AdminUserId = tokenValues.UserId,
                     Reason = body.Reason ?? "No reason provided"
                 };
                 await _commandBus.PublishAsync(cmd, CancellationToken.None);
@@ -456,6 +490,10 @@ public class UsersFunctions
             var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
+        }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
         }
     }
 
@@ -475,14 +513,15 @@ public class UsersFunctions
     {
         try
         {
-            var adminUserId = req.ExtractUserIdFromToken();
-            if (adminUserId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(adminUserId))
+            if (!_authorizationService.IsAdmin(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -492,7 +531,7 @@ public class UsersFunctions
 
             var command = new DeactivateUserCommand(targetUserId)
             {
-                AdminUserId = adminUserId,
+                AdminUserId = tokenValues.UserId,
                 Reason = "Deleted by admin"
             };
 
@@ -507,6 +546,10 @@ public class UsersFunctions
             var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
+        }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
         }
     }
 }

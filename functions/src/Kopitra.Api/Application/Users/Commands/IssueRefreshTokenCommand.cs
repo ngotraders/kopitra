@@ -6,6 +6,7 @@ namespace Kopitra.Api.Application.Users.Commands;
 
 public class IssueRefreshTokenCommand : Command<UserAggregate, UserId>
 {
+    public string SessionId { get; set; } = null!;
     public string RefreshToken { get; set; } = null!;
     public DateTime ExpiresAt { get; set; }
 

@@ -25,6 +25,7 @@ public class AuthFunctions
     private readonly ICommandBus _commandBus;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IClock _clock;
+    private readonly IHttpRequestDataAccessor _requestDataAccessor;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
 
@@ -32,12 +33,14 @@ public class AuthFunctions
         ICommandBus commandBus,
         IQueryProcessor queryProcessor,
         IClock clock,
+        IHttpRequestDataAccessor requestDataAccessor,
         IPasswordHasher passwordHasher,
         ITokenService tokenService)
     {
         _commandBus = commandBus;
         _queryProcessor = queryProcessor;
         _clock = clock;
+        _requestDataAccessor = requestDataAccessor;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
     }
@@ -55,6 +58,7 @@ public class AuthFunctions
     {
         try
         {
+            _requestDataAccessor.SetHttpRequestData(req);
             var body = await req.ReadAsJsonAsync<RegisterUserRequest>();
             if (body == null)
             {
@@ -114,6 +118,10 @@ public class AuthFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -130,6 +138,7 @@ public class AuthFunctions
     {
         try
         {
+            _requestDataAccessor.SetHttpRequestData(req);
             var body = await req.ReadAsJsonAsync<LoginRequest>();
             if (body == null)
             {
@@ -175,7 +184,11 @@ public class AuthFunctions
                 return unauthorizedResponse;
             }
 
-            var accessToken = _tokenService.GenerateToken(user.Id, new[] { new Claim("email", user.Email) });
+            var sessionId = Guid.NewGuid().ToString("N");
+            var accessToken = _tokenService.GenerateToken(user.Id, new[] {
+                new Claim("email", user.Email),
+                new Claim("sessionId", sessionId),
+            });
             var refreshToken = Guid.NewGuid().ToString("N");
             var expires = _clock.UtcNow.AddDays(30);
 
@@ -183,6 +196,7 @@ public class AuthFunctions
             var userId = new UserId(user.Id);
             var issueCmd = new IssueRefreshTokenCommand(userId)
             {
+                SessionId = sessionId,
                 RefreshToken = refreshToken,
                 ExpiresAt = expires.DateTime,
             };
@@ -213,6 +227,10 @@ public class AuthFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -229,6 +247,7 @@ public class AuthFunctions
     {
         try
         {
+            _requestDataAccessor.SetHttpRequestData(req);
             var body = await req.ReadAsJsonAsync<RefreshTokenRequest>();
             if (body == null || string.IsNullOrWhiteSpace(body.RefreshToken))
             {
@@ -237,28 +256,38 @@ public class AuthFunctions
                 return badResponse;
             }
 
-            var user = await _queryProcessor.ProcessAsync(new GetUserByRefreshTokenQuery(body.RefreshToken), CancellationToken.None);
-            if (user == null)
+            var userSession = await _queryProcessor.ProcessAsync(new GetUserSessionByRefreshTokenQuery(body.RefreshToken), CancellationToken.None);
+            if (userSession == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteAsJsonAsync(new ApiResponse("Invalid refresh token"));
                 return unauthorizedResponse;
             }
 
-            if (user.RefreshTokenExpiresAt == null || user.RefreshTokenExpiresAt < _clock.UtcNow)
+            if (userSession.RefreshTokenExpiresAt == null || userSession.RefreshTokenExpiresAt < _clock.UtcNow)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteAsJsonAsync(new ApiResponse("Refresh token expired"));
                 return unauthorizedResponse;
             }
 
+            var user = await _queryProcessor.ProcessAsync(new GetUserByIdQuery(UserId.With(userSession.UserId)), CancellationToken.None);
+            if (user == null)
+            {
+                var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorizedResponse.WriteAsJsonAsync(new ApiResponse("Invalid refresh token"));
+                return unauthorizedResponse;
+            }
             // Generate new tokens
-            var newAccessToken = _tokenService.GenerateToken(user.Id, new[] { new Claim("email", user.Email) });
+            var newAccessToken = _tokenService.GenerateToken(userSession.Id, new[] { 
+                new Claim("email", user.Email),
+                new Claim("sessionId", userSession.SessionId),
+            });
             var newRefreshToken = Guid.NewGuid().ToString("N");
             var expires = _clock.UtcNow.AddDays(30);
 
             // Persist new newRefreshToken token via aggregate command
-            var userId = new UserId(user.Id);
+            var userId = new UserId(userSession.Id);
             var issueCmd = new IssueRefreshTokenCommand(userId)
             {
                 RefreshToken = newRefreshToken,
@@ -287,6 +316,10 @@ public class AuthFunctions
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
         }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
+        }
     }
 
     /// <summary>
@@ -302,17 +335,28 @@ public class AuthFunctions
     {
         try
         {
-            // Extract user ID from JWT token
-            var userId = req.ExtractUserIdFromToken();
-            if (userId == null)
+            _requestDataAccessor.SetHttpRequestData(req);
+            // Extract userSession ID from JWT token
+            var tokenValues = req.ExtractJwtTokenValues();
+            if (tokenValues == null || tokenValues.SessionId == null)
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 return unauthorizedResponse;
             }
 
-            // In production, invalidate refreshToken token in database
-            // For now, just return success
-            await Task.CompletedTask;
+            var userSession = await _queryProcessor.ProcessAsync(new GetUserSessionBySessionIdQuery(tokenValues.SessionId), CancellationToken.None);
+            if (userSession == null)
+            {
+                var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorizedResponse.WriteAsJsonAsync(new ApiResponse("Invalid refresh token"));
+                return unauthorizedResponse;
+            }
+
+            var revokeTokenCmd = new RevokeRefreshTokenCommand(UserId.With(userSession.UserId))
+            {
+                SessionId = userSession.SessionId,
+            };
+            await _commandBus.PublishAsync(revokeTokenCmd, CancellationToken.None);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(new ApiResponse("Logged out successfully"));
@@ -323,6 +367,10 @@ public class AuthFunctions
             var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
             await errorResponse.WriteAsJsonAsync(new ApiResponse(ex.Message));
             return errorResponse;
+        }
+        finally
+        {
+            _requestDataAccessor.ClearHttpRequestData();
         }
     }
 }

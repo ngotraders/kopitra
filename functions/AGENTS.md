@@ -883,6 +883,68 @@ When implementing a new feature:
 - [ ] **Null-forgiving operators used appropriately** - Parameterless constructors use `null!` to suppress nullability warnings
 - [ ] **No circular dependency issues** - Commands → Queries pattern does not exist
 
+### ReadModel Event Handler Implementation
+
+**Critical: Every domain event that should be exposed in queries must have a corresponding ReadModel handler.**
+
+When implementing ReadModel event handlers in `Application/[Aggregate]/Queries/[Aggregate]ReadModel.cs`, ensure:
+
+```csharp
+// Implement IAmReadModelFor<> for every event that updates the ReadModel
+public class UserReadModel : IReadModel,
+    IAmReadModelFor<UserAggregate, UserId, UserRegisteredEvent>,
+    IAmReadModelFor<UserAggregate, UserId, UserLoginEvent>,           // Track last login
+    IAmReadModelFor<UserAggregate, UserId, UserProviderRoleEnabledEvent>,  // Update CanProvide = true
+    IAmReadModelFor<UserAggregate, UserId, UserProviderRoleDisabledEvent>, // Update CanProvide = false
+    IAmReadModelFor<UserAggregate, UserId, UserDeactivatedEvent>,     // Set IsActive = false, track admin change
+    IAmReadModelFor<UserAggregate, UserId, UserReactivatedEvent>,     // Set IsActive = true, track admin change
+    IAmReadModelFor<UserAggregate, UserId, UserPermissionsChangedEvent> // Update CanProvide/CanSubscribe, track change
+{
+    // Properties that track domain state
+    public bool CanProvide { get; set; }
+    public bool CanSubscribe { get; set; }
+    public bool IsActive { get; set; }
+    public DateTimeOffset? LastLoginAt { get; set; }
+    public DateTimeOffset? LastAdminChangeAt { get; set; }      // Audit trail - when admin made changes
+    public string? LastAdminChangeType { get; set; }            // Audit trail - what type of change
+
+    // Event handlers MUST update the state that queries depend on
+    public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserProviderRoleEnabledEvent> domainEvent, CancellationToken cancellationToken)
+    {
+        CanProvide = true;  // CRITICAL: Set the flag that queries check
+        Roles = Roles.Append("Provider").Distinct().ToArray();
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserDeactivatedEvent> domainEvent, CancellationToken cancellationToken)
+    {
+        IsActive = false;
+        LastAdminChangeAt = domainEvent.Timestamp;  // Track when change occurred
+        LastAdminChangeType = "Deactivated";        // Track type of change
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyAsync(IReadModelContext context, IDomainEvent<UserAggregate, UserId, UserLoginEvent> domainEvent, CancellationToken cancellationToken)
+    {
+        LastLoginAt = domainEvent.Timestamp;  // Record audit trail for authentication
+        return Task.CompletedTask;
+    }
+}
+```
+
+**Key Points for Queries:**
+- Query handlers must be registered in `ServiceCollectionExtension.cs`:
+  ```csharp
+  ef.AddQueryHandlers(
+      typeof(Users.Queries.GetUserByIdQueryHandler),
+      typeof(Users.Queries.GetUsersByRoleQueryHandler),  // ← MUST be registered or DI will fail
+      // ... all other handlers
+  );
+  ```
+- ReadModel fields updated by `ApplyAsync()` methods must match properties that Query handlers and API responses depend on
+- Missing registrations cause runtime `InvalidOperationException: No service registered for IQueryHandler<...>`
+- ReadModel updates are synchronous when using InMemory database; in production (SQL), they may have slight delay
+
 ## 🌐 Azure Functions & OpenAPI Design
 
 ### Aggregate-Based Endpoint Organization
@@ -1835,7 +1897,217 @@ public class AdminUserManagementFunction
 }
 ```
 
-### 7. Dependency Injection
+### 6. Authentication Information Extraction from JWT Tokens
+
+**Important Implementation Details for AuthFunctions and UsersFunctions:**
+
+When implementing authentication-related Functions (AuthFunctions, UsersFunctions), extract JWT token values and expand authentication information as follows:
+
+```csharp
+// Extension method for extracting token claims and expanding user information
+public static class HttpRequestDataExtensions
+{
+    public static TokenValues? ExtractJwtTokenValues(this HttpRequestData req)
+    {
+        var authHeader = req.Headers.FirstOrDefault("Authorization");
+        if (string.IsNullOrWhiteSpace(authHeader) || !authHeader.StartsWith("Bearer "))
+            return null;
+
+        var token = authHeader.Substring("Bearer ".Length);
+        // Parse JWT claims (implementation varies by token library)
+        var principal = _tokenService.ValidateToken(token);
+        
+        return new TokenValues
+        {
+            UserId = new UserId(principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? ""),
+            Email = principal.FindFirst(ClaimTypes.Email)?.Value ?? "",
+            SessionId = principal.FindFirst("sessionId")?.Value ?? ""
+        };
+    }
+}
+
+// In AuthFunctions.cs Login method:
+var accessToken = _tokenService.GenerateToken(user.Id, new[] {
+    new Claim("email", user.Email),
+    new Claim("sessionId", sessionId),  // Session ID for tracking active sessions
+});
+```
+
+**Key Points:**
+- Always set `IHttpRequestDataAccessor` via `_requestDataAccessor.SetHttpRequestData(req)` at the start of each Function
+- Call `_requestDataAccessor.ClearHttpRequestData()` in finally block for cleanup
+- Extract token values early and use for authorization checks
+- Store session ID in claims for audit trail tracking
+- Handle expired/invalid tokens by returning HTTP 401 Unauthorized
+
+### EventFlow Metadata Automatic Injection
+
+**Critical: The IHttpRequestDataAccessor and EventFlowMetadataProvider work together to automatically inject metadata into all domain events.**
+
+When you call `_requestDataAccessor.SetHttpRequestData(req)` at the function entry point, EventFlow automatically extracts and attaches the following metadata to all events published within that request context:
+
+```csharp
+// In every Azure Function - template pattern:
+public async Task<HttpResponseData> YourFunctionName(
+    [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "your/route")] HttpRequestData req)
+{
+    try
+    {
+        // 1. SET REQUEST CONTEXT: This enables EventFlow metadata injection
+        _requestDataAccessor.SetHttpRequestData(req);
+        
+        // 2. Process request - all commands published here will automatically get metadata
+        await _commandBus.PublishAsync(command, CancellationToken.None);
+        
+        // 3. Return response
+        return response;
+    }
+    catch (Exception ex)
+    {
+        return errorResponse;
+    }
+    finally
+    {
+        // 4. CLEAR REQUEST CONTEXT: Prevent memory leaks and context pollution
+        _requestDataAccessor.ClearHttpRequestData();
+    }
+}
+```
+
+**Automatic Metadata Extraction:**
+
+The `EventFlowMetadataProvider` automatically extracts and attaches the following metadata from HttpRequestData to every domain event:
+
+```csharp
+// Metadata automatically added by EventFlowMetadataProvider.ProvideMetadata()
+
+"requestId"          // From x-request-id header, or generated Guid
+"clientIp"          // From x-forwarded-for, x-client-ip, or x-real-ip header
+"userAgent"         // From user-agent header
+"initiatorId"       // From JWT "sub" claim (user who triggered the action)
+"initiatorIsAdmin"  // From JWT "role" claim (whether user is admin)
+```
+
+**Metadata is available in event store for audit trail:**
+
+When events are stored in the event store, metadata is persisted alongside the event data, enabling complete audit trails:
+
+```csharp
+// Event store entry includes:
+{
+    aggregateId: "user-12345",
+    eventType: "UserRegisteredEvent",
+    eventData: { Email: "user@example.com", ... },
+    metadata: {
+        requestId: "req-guid-123",
+        clientIp: "192.168.1.100",
+        userAgent: "Mozilla/5.0...",
+        initiatorId: "admin-999",
+        initiatorIsAdmin: "true",
+        timestamp: "2026-01-12T10:30:00Z"
+    }
+}
+```
+
+**Implementation Details:**
+
+1. **AsyncLocal Storage**: `IHttpRequestDataAccessor` uses `AsyncLocal<HttpRequestData?>` to store the current request context per async call chain
+2. **Automatic Retrieval**: `EventFlowMetadataProvider.ProvideMetadata()` is called automatically by EventFlow before each event is persisted
+3. **JWT Parsing**: Provider extracts user ID and admin flag from JWT claims for audit trail
+4. **Fallback Values**: If headers are missing (e.g., local testing), requestId is auto-generated as Guid
+
+**What happens if you DON'T call SetHttpRequestData():**
+
+```csharp
+// ❌ WRONG: Missing SetHttpRequestData
+public async Task<HttpResponseData> Register(HttpRequestData req)
+{
+    // No call to _requestDataAccessor.SetHttpRequestData(req)
+    await _commandBus.PublishAsync(command, ...);
+    // Result: EventFlowMetadataProvider.GetHttpRequestData() throws InvalidOperationException
+    // Exception: "HttpRequestData is not set."
+}
+
+// ✅ CORRECT: SetHttpRequestData at start
+public async Task<HttpResponseData> Register(HttpRequestData req)
+{
+    try
+    {
+        _requestDataAccessor.SetHttpRequestData(req);  // ✅ Set context
+        await _commandBus.PublishAsync(command, ...);
+        return response;
+    }
+    finally
+    {
+        _requestDataAccessor.ClearHttpRequestData();   // ✅ Clean up
+    }
+}
+```
+
+**Why the try-finally pattern is essential:**
+
+- **try block**: Sets metadata context before business logic executes
+- **finally block**: Guarantees cleanup even if exceptions occur, preventing:
+  - Memory leaks (AsyncLocal values retained across requests)
+  - Context pollution (subsequent requests see previous request's metadata)
+  - Stale data in domain events (next request shouldn't have previous user's info)
+
+**Testing consideration:**
+
+In unit/integration tests, if you're not using real HttpRequestData, you can mock the accessor:
+
+```csharp
+// Test setup - mock the accessor
+var mockAccessor = new Mock<IHttpRequestDataAccessor>();
+mockAccessor
+    .Setup(a => a.GetHttpRequestData())
+    .Returns(() => null); // Or provide test HttpRequestData
+
+// In test: EventFlowMetadataProvider gracefully handles null by returning empty metadata
+var metadata = provider.ProvideMetadata<UserAggregate, UserId>(
+    userId, 
+    @event, 
+    existingMetadata);
+// Returns: empty Dictionary<string, string>
+```
+
+### 8. Audit Logging for User Actions (RecordUserLoginCommand)
+
+**Important: Audit Trail Recording in Login Flow:**
+
+When user successfully authenticates in `AuthFunctions.Login()`, execute `RecordUserLoginCommand` to create an audit trail entry:
+
+```csharp
+// In AuthFunctions.cs after successful authentication:
+
+// Issue refresh token for session persistence
+var issueCmd = new IssueRefreshTokenCommand(userId)
+{
+    SessionId = sessionId,
+    RefreshToken = refreshToken,
+    ExpiresAt = expires.DateTime,
+};
+await _commandBus.PublishAsync(issueCmd, CancellationToken.None).ConfigureAwait(false);
+
+// Record login event (audit trail entry with timestamp)
+var recordCmd = new RecordUserLoginCommand(userId);
+await _commandBus.PublishAsync(recordCmd, CancellationToken.None).ConfigureAwait(false);
+```
+
+**Important Conventions:**
+- `IssueRefreshTokenCommand` persists the refresh token in the aggregate (for token validation during refresh)
+- `RecordUserLoginCommand` creates an audit entry and updates `UserReadModel.LastLoginAt` timestamp
+- Both commands are fired after token validation succeeds and before returning success response
+- Use `ConfigureAwait(false)` for async operations to avoid UI context blocking
+- `RecordUserLoginCommand` is non-critical to response, so errors are logged but don't fail the request
+
+**Audit Event Flow:**
+1. User submits login credentials
+2. System validates email/password
+3. If valid: Issue refresh token → Record login event → Return tokens
+4. ReadModel updates with `LastLoginAt = domainEvent.Timestamp`
+
+### 9. Dependency Injection
 
 **File**: `Program.cs`
 

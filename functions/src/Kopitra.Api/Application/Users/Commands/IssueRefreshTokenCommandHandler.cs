@@ -9,7 +9,7 @@ public class IssueRefreshTokenCommandHandler : CommandHandler<UserAggregate, Use
 {
     public override Task ExecuteAsync(UserAggregate aggregate, IssueRefreshTokenCommand command, CancellationToken cancellationToken)
     {
-        aggregate.IssueRefreshToken(command.RefreshToken, command.ExpiresAt);
+        aggregate.IssueRefreshToken(command.SessionId, command.RefreshToken, command.ExpiresAt);
         return Task.CompletedTask;
     }
 }

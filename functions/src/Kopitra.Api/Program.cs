@@ -61,7 +61,7 @@ builder.Services
     // Authentication services
     .AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>()
     .AddSingleton<ITokenService, JwtTokenService>()
-    .AddHttpContextAccessor()
-    .AddSingleton<IMetadataProvider, HttpRequestMetadataProvider>();
+    .AddSingleton<IHttpRequestDataAccessor, AsyncLocalHttpRequestDataAccessor>()
+    .AddSingleton<IMetadataProvider, EventFlowMetadataProvider>();
 
 builder.Build().Run();
