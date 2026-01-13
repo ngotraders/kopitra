@@ -64,6 +64,50 @@ public static class ServiceCollectionExtension
                 typeof(Users.Queries.GetUserSessionBySessionIdQueryHandler)
             );
 
+            // Accounts
+            ef.AddEvents(
+                typeof(Domain.Accounts.Events.AccountRegisteredEvent),
+                typeof(Domain.Accounts.Events.AccountConnectionVerifiedEvent),
+                typeof(Domain.Accounts.Events.AccountBalanceUpdatedEvent),
+                typeof(Domain.Accounts.Events.AccountInfoUpdatedEvent),
+                typeof(Domain.Accounts.Events.AccountDeletedEvent),
+                typeof(Domain.Accounts.Events.AccountActivationInitiatedEvent),
+                typeof(Domain.Accounts.Events.AccountActivationConfirmedEvent),
+                typeof(Domain.Accounts.Events.ActivationCodeGeneratedEvent),
+                typeof(Domain.Accounts.Events.ActivationCodeConfirmedEvent),
+                typeof(Domain.Accounts.Events.ActivationCodeExpiredEvent)
+            );
+            ef.AddCommands(
+                typeof(Accounts.Commands.RegisterAccountCommand),
+                typeof(Accounts.Commands.VerifyAccountConnectionCommand),
+                typeof(Accounts.Commands.UpdateAccountBalanceCommand),
+                typeof(Accounts.Commands.UpdateAccountInfoCommand),
+                typeof(Accounts.Commands.DeleteAccountCommand),
+                typeof(Accounts.Commands.InitiateAccountActivationCommand),
+                typeof(Accounts.Commands.ConfirmAccountActivationCommand),
+                typeof(Accounts.Commands.GenerateActivationCodeCommand),
+                typeof(Accounts.Commands.ConfirmActivationCodeCommand),
+                typeof(Accounts.Commands.ExpireActivationCodeCommand)
+            );
+            ef.AddCommandHandlers(
+                typeof(Accounts.Commands.RegisterAccountCommandHandler),
+                typeof(Accounts.Commands.VerifyAccountConnectionCommandHandler),
+                typeof(Accounts.Commands.UpdateAccountBalanceCommandHandler),
+                typeof(Accounts.Commands.UpdateAccountInfoCommandHandler),
+                typeof(Accounts.Commands.DeleteAccountCommandHandler),
+                typeof(Accounts.Commands.InitiateAccountActivationCommandHandler),
+                typeof(Accounts.Commands.ConfirmAccountActivationCommandHandler),
+                typeof(Accounts.Commands.GenerateActivationCodeCommandHandler),
+                typeof(Accounts.Commands.ConfirmActivationCodeCommandHandler),
+                typeof(Accounts.Commands.ExpireActivationCodeCommandHandler)
+            );
+            ef.AddQueryHandlers(
+                typeof(Accounts.Queries.GetAccountsByUserIdQueryHandler),
+                typeof(Accounts.Queries.GetAccountByIdQueryHandler),
+                typeof(Accounts.Queries.GetActivationCodeByIdQueryHandler),
+                typeof(Accounts.Queries.GetActivationCodeByCodeQueryHandler)
+            );
+
             // Expert Advisors
             ef.AddEvents(
                 typeof(Domain.ExpertAdvisors.Events.SessionCreatedEvent),
