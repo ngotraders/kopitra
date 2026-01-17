@@ -8,7 +8,6 @@ namespace Kopitra.Api.Domain.Accounts.Events;
 /// </summary>
 public class ActivationCodeConfirmedEvent : AggregateEvent<ActivationCodeAggregate, ActivationCodeId>
 {
-    public string UserId { get; set; } = null!;
-    public BrokerType BrokerType { get; set; }
-    public DateTime ConfirmedAt { get; set; }
+    public UserId UserId { get; set; } = null!;
+    public DateTimeOffset ConfirmedAt { get; set; }
 }

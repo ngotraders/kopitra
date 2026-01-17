@@ -13,6 +13,4 @@ public class AccountRegisteredEvent : AggregateEvent<AccountAggregate, AccountId
     public string BrokerName { get; set; } = null!;
     public string AccountNumber { get; set; } = null!;
     public string ServerName { get; set; } = null!;
-    public string? ApiKey { get; set; }
-    public string? ApiSecret { get; set; }
 }

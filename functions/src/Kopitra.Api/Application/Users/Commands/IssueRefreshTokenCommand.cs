@@ -8,7 +8,7 @@ public class IssueRefreshTokenCommand : Command<UserAggregate, UserId>
 {
     public string SessionId { get; set; } = null!;
     public string RefreshToken { get; set; } = null!;
-    public DateTime ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     public IssueRefreshTokenCommand(UserId aggregateId) : base(aggregateId) { }
 }

@@ -2,6 +2,7 @@ using EventFlow.Aggregates;
 using EventFlow.ReadStores;
 using Kopitra.Api.Domain.Accounts;
 using Kopitra.Api.Domain.Accounts.Events;
+using Kopitra.Api.Domain.ValueObjects;
 
 namespace Kopitra.Api.Application.Accounts.Queries;
 
@@ -15,28 +16,28 @@ public class ActivationCodeReadModel : IReadModel,
 {
     public string Id { get; set; } = null!;
     public string Code { get; set; } = null!;
+    public string BrokerType { get; set; } = null!;
     public string BrokerName { get; set; } = null!;
     public string AccountNumber { get; set; } = null!;
     public string ServerName { get; set; } = null!;
-    public string UserId { get; set; } = null!;
+    public string? UserId { get; set; } = null!;
     public int Status { get; set; } = 0; // Pending = 0, Confirmed = 1, Expired = 2
-    public DateTime ExpiresAt { get; set; }
-    public DateTime GeneratedAt { get; set; }
-    public DateTime? ConfirmedAt { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? ConfirmedAt { get; set; }
+    public DateTimeOffset GeneratedAt { get; set; }
 
     public Task ApplyAsync(IReadModelContext context, IDomainEvent<ActivationCodeAggregate, ActivationCodeId, ActivationCodeGeneratedEvent> domainEvent, CancellationToken cancellationToken)
     {
         var @event = domainEvent.AggregateEvent;
         Id = context.ReadModelId;
         Code = @event.Code;
+        BrokerType = @event.BrokerType.ToString();
         BrokerName = @event.BrokerName;
         AccountNumber = @event.AccountNumber;
         ServerName = @event.ServerName;
-        UserId = @event.UserId;
+        UserId = @event.UserId?.Value;
         ExpiresAt = @event.ExpiresAt;
-        GeneratedAt = @event.GeneratedAt;
-        CreatedAt = domainEvent.Timestamp.DateTime;
+        GeneratedAt = domainEvent.Timestamp;
         Status = 0; // Pending
         return Task.CompletedTask;
     }

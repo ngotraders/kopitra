@@ -65,7 +65,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            var query = new GetUserByIdQuery(tokenValues.UserId);
+            var query = new GetUserByIdQuery(UserId.With(tokenValues.UserId));
             var user = await _queryProcessor.ProcessAsync(query, CancellationToken.None);
 
             if (!user.IsActive)
@@ -187,13 +187,13 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            var targetUserId = new UserId(userId);
-            if (!_authorizationService.CanViewUser(tokenValues.UserId, targetUserId))
+            if (!_authorizationService.CanViewUser(tokenValues.UserId, userId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
             }
 
+            var targetUserId = new UserId(userId);
             var query = new GetUserByIdQuery(targetUserId);
             var user = await _queryProcessor.ProcessAsync(query, CancellationToken.None);
 
@@ -250,8 +250,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            var targetUserId = new UserId(userId);
-            if (!_authorizationService.CanManageUser(tokenValues.UserId, targetUserId))
+            if (!_authorizationService.CanManageUser(tokenValues.UserId, userId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -265,6 +264,7 @@ public class UsersFunctions
                 return badResponse;
             }
 
+            var targetUserId = new UserId(userId);
             var command = new UpdateUserInfoCommand(targetUserId)
             {
                 Email = body.Email,
@@ -460,13 +460,14 @@ public class UsersFunctions
                 return badResponse;
             }
 
+            var adminUserId = new UserId(tokenValues.UserId);
             var targetUserId = new UserId(userId);
 
             if (body.IsActive)
             {
                 var cmd = new ReactivateUserCommand(targetUserId)
                 {
-                    AdminUserId = tokenValues.UserId,
+                    AdminUserId = adminUserId,
                     Memo = body.Memo
                 };
                 await _commandBus.PublishAsync(cmd, CancellationToken.None);
@@ -475,7 +476,7 @@ public class UsersFunctions
             {
                 var cmd = new DeactivateUserCommand(targetUserId)
                 {
-                    AdminUserId = tokenValues.UserId,
+                    AdminUserId = adminUserId,
                     Reason = body.Reason ?? "No reason provided"
                 };
                 await _commandBus.PublishAsync(cmd, CancellationToken.None);
@@ -527,11 +528,12 @@ public class UsersFunctions
                 return forbiddenResponse;
             }
 
+            var adminUserId = new UserId(tokenValues.UserId);
             var targetUserId = new UserId(userId);
 
             var command = new DeactivateUserCommand(targetUserId)
             {
-                AdminUserId = tokenValues.UserId,
+                AdminUserId = adminUserId,
                 Reason = "Deleted by admin"
             };
 

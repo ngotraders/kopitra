@@ -41,8 +41,6 @@ public class RegisterAccountCommandTests
             BrokerName = "XM",
             AccountNumber = "12345678",
             ServerName = "XMGlobal-Demo",
-            ApiKey = "test-key",
-            ApiSecret = "test-secret"
         };
 
         // Act
@@ -59,8 +57,6 @@ public class RegisterAccountCommandTests
         Assert.AreEqual("XM", account.BrokerName);
         Assert.AreEqual("12345678", account.AccountNumber);
         Assert.AreEqual("XMGlobal-Demo", account.ServerName);
-        Assert.AreEqual("test-key", account.ApiKey);
-        Assert.AreEqual("test-secret", account.ApiSecret);
         Assert.AreEqual(0m, account.Balance);
         Assert.IsFalse(account.IsConnected);
         Assert.IsFalse(account.IsDeleted);
@@ -79,8 +75,6 @@ public class RegisterAccountCommandTests
             BrokerName = "FXCM",
             AccountNumber = "87654321",
             ServerName = "FXCM-Live",
-            ApiKey = "fxcm-key",
-            ApiSecret = "fxcm-secret"
         };
 
         // Act
@@ -95,35 +89,6 @@ public class RegisterAccountCommandTests
         Assert.AreEqual("FXCM", account.BrokerName);
         Assert.AreEqual("87654321", account.AccountNumber);
         Assert.AreEqual("FXCM-Live", account.ServerName);
-    }
-
-    [TestMethod]
-    public async Task RegisterAccount_WithNullApiCredentials_CreatesSuccessfully()
-    {
-        // Arrange
-        var accountId = new AccountId($"account-{Guid.NewGuid()}");
-        var userId = new UserId($"user-{Guid.NewGuid()}");
-        var command = new RegisterAccountCommand(accountId)
-        {
-            UserId = userId,
-            BrokerType = BrokerType.MT4,
-            BrokerName = "XM",
-            AccountNumber = "12345678",
-            ServerName = "XMGlobal-Demo",
-            ApiKey = null,
-            ApiSecret = null
-        };
-
-        // Act
-        await _commandBus.PublishAsync(command, CancellationToken.None);
-
-        // Assert
-        var query = new GetAccountByIdQuery(accountId);
-        var account = await _queryProcessor.ProcessAsync(query, CancellationToken.None);
-
-        Assert.IsNotNull(account);
-        Assert.IsNull(account.ApiKey);
-        Assert.IsNull(account.ApiSecret);
     }
 
     [TestMethod]

@@ -1,5 +1,3 @@
-using Kopitra.Api.Domain.ValueObjects;
-
 namespace Kopitra.Api.Application.Users.Services;
 
 /// <summary>
@@ -9,49 +7,49 @@ namespace Kopitra.Api.Application.Users.Services;
 public class AuthorizationService : IAuthorizationService
 {
     // This would normally be injected with actual user repository
-    private readonly HashSet<UserId> _admins = new();
+    private readonly HashSet<string> _admins = new();
 
     public AuthorizationService()
     {
         // In real implementation, load admin users from database
     }
 
-    public bool IsAdmin(UserId requestingUserId)
+    public bool IsAdmin(string requestingUserId)
     {
         return _admins.Contains(requestingUserId);
     }
 
-    public bool CanManageUser(UserId requestingUserId, UserId targetUserId)
+    public bool CanManageUser(string requestingUserId, string targetUserId)
     {
         // User can manage themselves or admin can manage anyone
         return requestingUserId.Equals(targetUserId) || IsAdmin(requestingUserId);
     }
 
-    public bool CanViewUser(UserId requestingUserId, UserId targetUserId)
+    public bool CanViewUser(string requestingUserId, string targetUserId)
     {
         // User can view themselves or admin can view anyone
         return requestingUserId.Equals(targetUserId) || IsAdmin(requestingUserId);
     }
 
-    public bool HasProviderRole(UserId userId)
+    public bool HasProviderRole(string userId)
     {
         // Would check user read model in production
         return false;
     }
 
-    public bool HasSubscriberRole(UserId userId)
+    public bool HasSubscriberRole(string userId)
     {
         // Would check user read model in production
         return true; // Default for new users
     }
 
-    public bool IsUserActive(UserId userId)
+    public bool IsUserActive(string userId)
     {
         // Would check user read model in production
         return true;
     }
 
-    public bool CanPerformAdminActions(UserId requestingUserId)
+    public bool CanPerformAdminActions(string requestingUserId)
     {
         return IsAdmin(requestingUserId);
     }
@@ -59,7 +57,7 @@ public class AuthorizationService : IAuthorizationService
     /// <summary>
     /// Register a user as admin (for setup/testing)
     /// </summary>
-    public void RegisterAdmin(UserId adminUserId)
+    public void RegisterAdmin(string adminUserId)
     {
         _admins.Add(adminUserId);
     }
@@ -67,7 +65,7 @@ public class AuthorizationService : IAuthorizationService
     /// <summary>
     /// Unregister admin (revoke admin rights)
     /// </summary>
-    public void UnregisterAdmin(UserId adminUserId)
+    public void UnregisterAdmin(string adminUserId)
     {
         _admins.Remove(adminUserId);
     }

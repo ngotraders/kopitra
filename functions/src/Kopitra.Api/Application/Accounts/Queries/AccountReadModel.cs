@@ -22,16 +22,14 @@ namespace Kopitra.Api.Application.Accounts.Queries
         public string BrokerName { get; set; } = null!;
         public string AccountNumber { get; set; } = null!;
         public string ServerName { get; set; } = null!;
-        public string? ApiKey { get; set; }
-        public string? ApiSecret { get; set; }
         public decimal Balance { get; set; } = 0;
         public bool IsConnected { get; set; } = false;
         public int ConnectionStatus { get; set; } = (int)Domain.Accounts.ConnectionStatus.NotConnected;
-        public DateTime? LastSyncedAt { get; set; }
-        public DateTime? LastVerifiedAt { get; set; }
+        public DateTimeOffset? LastSyncedAt { get; set; }
+        public DateTimeOffset? LastVerifiedAt { get; set; }
         public bool IsDeleted { get; set; } = false;
-        public DateTime CreatedAt { get; set; }
-        public DateTime? DeletedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? DeletedAt { get; set; }
 
         public Task ApplyAsync(IReadModelContext context, IDomainEvent<AccountAggregate, AccountId, AccountRegisteredEvent> domainEvent, CancellationToken cancellationToken)
         {
@@ -42,9 +40,7 @@ namespace Kopitra.Api.Application.Accounts.Queries
             BrokerName = @event.BrokerName;
             AccountNumber = @event.AccountNumber;
             ServerName = @event.ServerName;
-            ApiKey = @event.ApiKey;
-            ApiSecret = @event.ApiSecret;
-            CreatedAt = domainEvent.Timestamp.UtcDateTime;
+            CreatedAt = domainEvent.Timestamp;
             return Task.CompletedTask;
         }
 
@@ -65,10 +61,6 @@ namespace Kopitra.Api.Application.Accounts.Queries
                 AccountNumber = @event.AccountNumber;
             if (!string.IsNullOrWhiteSpace(@event.ServerName))
                 ServerName = @event.ServerName;
-            if (@event.ApiKey != null)
-                ApiKey = @event.ApiKey;
-            if (@event.ApiSecret != null)
-                ApiSecret = @event.ApiSecret;
             return Task.CompletedTask;
         }
 

@@ -1,4 +1,3 @@
-using Kopitra.Api.Domain.ValueObjects;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
@@ -48,7 +47,7 @@ public static class HttpRequestDataExtensions
             return null;
         return new TokenValues()
         {
-            UserId = UserId.With(sub),
+            UserId = sub,
             SessionId = sessionId,
         };
     }
@@ -56,6 +55,6 @@ public static class HttpRequestDataExtensions
 
 public class TokenValues
 {
-    public UserId UserId { get; set; } = null!;
+    public string UserId { get; set; } = null!;
     public string? SessionId { get; set; }
 }

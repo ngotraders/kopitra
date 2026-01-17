@@ -1,5 +1,3 @@
-using Kopitra.Api.Domain.ValueObjects;
-
 namespace Kopitra.Api.Application.Users.Services;
 
 /// <summary>
@@ -11,35 +9,35 @@ public interface IAuthorizationService
     /// <summary>
     /// Check if requesting user is admin
     /// </summary>
-    bool IsAdmin(UserId requestingUserId);
+    bool IsAdmin(string requestingstring);
 
     /// <summary>
     /// Check if requesting user can manage target user (self or admin)
     /// </summary>
-    bool CanManageUser(UserId requestingUserId, UserId targetUserId);
+    bool CanManageUser(string requestingstring, string targetstring);
 
     /// <summary>
     /// Check if requesting user can view target user data (self or admin)
     /// </summary>
-    bool CanViewUser(UserId requestingUserId, UserId targetUserId);
+    bool CanViewUser(string requestingstring, string targetstring);
 
     /// <summary>
     /// Check if user has provider role
     /// </summary>
-    bool HasProviderRole(UserId userId);
+    bool HasProviderRole(string userId);
 
     /// <summary>
     /// Check if user has subscriber role
     /// </summary>
-    bool HasSubscriberRole(UserId userId);
+    bool HasSubscriberRole(string userId);
 
     /// <summary>
     /// Check if user is active
     /// </summary>
-    bool IsUserActive(UserId userId);
+    bool IsUserActive(string userId);
 
     /// <summary>
     /// Check if requesting user can perform admin actions (permission changes, deactivation, etc.)
     /// </summary>
-    bool CanPerformAdminActions(UserId requestingUserId);
+    bool CanPerformAdminActions(string requestingstring);
 }

@@ -13,9 +13,7 @@ namespace Kopitra.Api.Application.Accounts.Commands
                 command.BrokerType,
                 command.BrokerName,
                 command.AccountNumber,
-                command.ServerName,
-                command.ApiKey,
-                command.ApiSecret);
+                command.ServerName);
             return Task.CompletedTask;
         }
     }

@@ -1,6 +1,5 @@
+using EventFlow.EntityFramework;
 using EventFlow.Queries;
-using Kopitra.Api.Domain.ValueObjects;
-using Kopitra.Api.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kopitra.Api.Application.Accounts.Queries

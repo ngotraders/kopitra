@@ -7,17 +7,20 @@ namespace Kopitra.Api.Domain.Accounts;
 /// <summary>
 /// ActivationCode aggregate - manages the lifecycle of activation codes used in Flow 2
 /// </summary>
-public class ActivationCodeAggregate : AggregateRoot<ActivationCodeAggregate, ActivationCodeId>
+public class ActivationCodeAggregate : AggregateRoot<ActivationCodeAggregate, ActivationCodeId>,
+    IApply<ActivationCodeGeneratedEvent>,
+    IApply<ActivationCodeConfirmedEvent>
+    , IApply<ActivationCodeExpiredEvent>
 {
     public string Code { get; private set; } = null!;
+    public BrokerType BrokerType { get; private set; }
     public string BrokerName { get; private set; } = null!;
     public string AccountNumber { get; private set; } = null!;
     public string ServerName { get; private set; } = null!;
-    public string UserId { get; private set; } = null!;
+    public UserId? UserId { get; private set; }
     public ActivationCodeStatus Status { get; private set; } = ActivationCodeStatus.Pending;
-    public DateTime ExpiresAt { get; private set; }
-    public DateTime? ConfirmedAt { get; private set; }
-    public DateTime GeneratedAt { get; private set; }
+    public DateTimeOffset ExpiresAt { get; private set; }
+    public DateTimeOffset? ConfirmedAt { get; private set; }
 
     public ActivationCodeAggregate(ActivationCodeId id) : base(id)
     {
@@ -26,50 +29,56 @@ public class ActivationCodeAggregate : AggregateRoot<ActivationCodeAggregate, Ac
     /// <summary>
     /// Generate a new activation code
     /// </summary>
-    public void Generate(string code, string brokerName, string accountNumber, string serverName, 
-        string userId, DateTime expiresAt)
+    public void Generate(
+        string code, 
+        BrokerType brokerType, 
+        string brokerName, 
+        string accountNumber, 
+        string serverName, 
+        UserId? userId,
+        DateTimeOffset expiresAt)
     {
         if (string.IsNullOrWhiteSpace(code))
             throw new ArgumentException("Code is required.", nameof(code));
+        if (brokerType != BrokerType.MT4 && brokerType != BrokerType.MT5)
+            throw new ArgumentException("Broker type is required.", nameof(brokerType));
         if (string.IsNullOrWhiteSpace(brokerName))
             throw new ArgumentException("Broker name is required.", nameof(brokerName));
         if (string.IsNullOrWhiteSpace(accountNumber))
             throw new ArgumentException("Account number is required.", nameof(accountNumber));
         if (string.IsNullOrWhiteSpace(serverName))
             throw new ArgumentException("Server name is required.", nameof(serverName));
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new ArgumentException("User ID is required.", nameof(userId));
-        if (expiresAt <= DateTime.UtcNow)
-            throw new ArgumentException("Expiration time must be in the future.", nameof(expiresAt));
 
         Emit(new ActivationCodeGeneratedEvent
         {
             Code = code,
+            BrokerType = brokerType,
             BrokerName = brokerName,
             AccountNumber = accountNumber,
             ServerName = serverName,
             UserId = userId,
             ExpiresAt = expiresAt,
-            GeneratedAt = DateTime.UtcNow,
         });
     }
 
     /// <summary>
     /// Confirm/redeem the activation code
     /// </summary>
-    public void Confirm(BrokerType brokerType)
+    public void Confirm(UserId userId, DateTimeOffset confirmedAt)
     {
+        if (UserId != null && userId != UserId)
+            throw new InvalidOperationException("Can only confirm a pending activation code.");
+
         if (Status != ActivationCodeStatus.Pending)
             throw new InvalidOperationException("Can only confirm a pending activation code.");
         
-        if (DateTime.UtcNow > ExpiresAt)
+        if (confirmedAt > ExpiresAt)
             throw new InvalidOperationException("Activation code has expired.");
 
         Emit(new ActivationCodeConfirmedEvent
         {
-            UserId = UserId,
-            BrokerType = brokerType,
-            ConfirmedAt = DateTime.UtcNow,
+            UserId = userId,
+            ConfirmedAt = confirmedAt,
         });
     }
 
@@ -90,34 +99,27 @@ public class ActivationCodeAggregate : AggregateRoot<ActivationCodeAggregate, Ac
         });
     }
 
-    /// <summary>
-    /// Check if the code is still valid
-    /// </summary>
-    public bool IsValid()
-    {
-        return Status == ActivationCodeStatus.Pending && DateTime.UtcNow <= ExpiresAt;
-    }
-
     // Event application
-    private void Apply(ActivationCodeGeneratedEvent @event)
+    public void Apply(ActivationCodeGeneratedEvent @event)
     {
         Code = @event.Code;
+        BrokerType = @event.BrokerType;
         BrokerName = @event.BrokerName;
         AccountNumber = @event.AccountNumber;
         ServerName = @event.ServerName;
         UserId = @event.UserId;
         ExpiresAt = @event.ExpiresAt;
-        GeneratedAt = @event.GeneratedAt;
         Status = ActivationCodeStatus.Pending;
     }
 
-    private void Apply(ActivationCodeConfirmedEvent @event)
+    public void Apply(ActivationCodeConfirmedEvent @event)
     {
+        UserId = @event.UserId;
         ConfirmedAt = @event.ConfirmedAt;
         Status = ActivationCodeStatus.Confirmed;
     }
 
-    private void Apply(ActivationCodeExpiredEvent @event)
+    public void Apply(ActivationCodeExpiredEvent @event)
     {
         Status = ActivationCodeStatus.Expired;
     }

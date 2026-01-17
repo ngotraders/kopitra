@@ -8,8 +8,8 @@ namespace Kopitra.Api.Domain.Accounts.Events;
 /// </summary>
 public class AccountInfoUpdatedEvent : AggregateEvent<AccountAggregate, AccountId>
 {
+    public BrokerType? BrokerType { get; set; }
+    public string? BrokerName { get; set; }
     public string? AccountNumber { get; set; }
     public string? ServerName { get; set; }
-    public string? ApiKey { get; set; }
-    public string? ApiSecret { get; set; }
 }

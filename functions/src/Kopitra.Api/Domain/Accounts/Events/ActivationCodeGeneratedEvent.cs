@@ -9,10 +9,10 @@ namespace Kopitra.Api.Domain.Accounts.Events;
 public class ActivationCodeGeneratedEvent : AggregateEvent<ActivationCodeAggregate, ActivationCodeId>
 {
     public string Code { get; set; } = null!;
+    public BrokerType BrokerType { get; set; }
     public string BrokerName { get; set; } = null!;
     public string AccountNumber { get; set; } = null!;
     public string ServerName { get; set; } = null!;
-    public string UserId { get; set; } = null!;
-    public DateTime ExpiresAt { get; set; }
-    public DateTime GeneratedAt { get; set; }
+    public UserId? UserId { get; set; } = null!;
+    public DateTimeOffset ExpiresAt { get; set; }
 }

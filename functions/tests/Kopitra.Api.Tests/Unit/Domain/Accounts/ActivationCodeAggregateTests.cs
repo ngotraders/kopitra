@@ -13,7 +13,7 @@ public class ActivationCodeAggregateTests
     public void ActivationCodeAggregate_CanBeInstantiated()
     {
         // Arrange & Act
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
 
         // Assert
@@ -25,7 +25,7 @@ public class ActivationCodeAggregateTests
     public void ActivationCodeAggregate_IsInitiallyPending()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
 
         // Assert
@@ -40,17 +40,18 @@ public class ActivationCodeAggregateTests
     public void Generate_WithValidData_EmitsActivationCodeGeneratedEvent()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
         var activationCode = "ABC123DEF456";
+        var brokerType = BrokerType.MT4;
         var brokerName = "XM";
         var accountNumber = "12345678";
         var serverName = "XMGlobal-Demo";
-        var userId = "user-123";
-        var expiresAt = DateTime.UtcNow.AddHours(24);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
 
         // Act
-        code.Generate(activationCode, brokerName, accountNumber, serverName, userId, expiresAt);
+        code.Generate(activationCode, brokerType, brokerName, accountNumber, serverName, userId, expiresAt);
 
         // Assert
         var events = code.UncommittedEvents.ToList();
@@ -69,21 +70,22 @@ public class ActivationCodeAggregateTests
     public void Generate_AppliesEventCorrectly()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
+        var userId = UserId.New;
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
         // Act
-        code.Generate("XYZ789", "FXCM", "87654321", "FXCM-Live", "user-456", expiresAt);
+        code.Generate("XYZ789", BrokerType.MT4, "FXCM", "87654321", "FXCM-Live", userId, expiresAt);
 
         // Assert
         Assert.AreEqual("XYZ789", code.Code);
+        Assert.AreEqual(BrokerType.MT4, code.BrokerType);
         Assert.AreEqual("FXCM", code.BrokerName);
         Assert.AreEqual("87654321", code.AccountNumber);
         Assert.AreEqual("FXCM-Live", code.ServerName);
-        Assert.AreEqual("user-456", code.UserId);
+        Assert.AreEqual(userId, code.UserId);
         Assert.AreEqual(ActivationCodeStatus.Pending, code.Status);
-        Assert.IsNotNull(code.GeneratedAt);
     }
 
     [TestMethod]
@@ -91,12 +93,26 @@ public class ActivationCodeAggregateTests
     public void Generate_WithEmptyCode_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
         // Act
-        code.Generate("", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        code.Generate("", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", null, expiresAt);
+    }
+
+    [TestMethod]
+    [ExpectedException(typeof(ArgumentException))]
+    public void Generate_WithInvalidBrokerType_ThrowsException()
+    {
+        // Arrange
+        var codeId = ActivationCodeId.New;
+        var code = new ActivationCodeAggregate(codeId);
+        var userId = UserId.New;
+        var expiresAt = DateTime.UtcNow.AddHours(24);
+
+        // Act
+        code.Generate("ABC123", (BrokerType)0, "", "12345678", "XMGlobal-Demo", null, expiresAt);
     }
 
     [TestMethod]
@@ -104,12 +120,13 @@ public class ActivationCodeAggregateTests
     public void Generate_WithEmptyBrokerName_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
+        var userId = UserId.New;
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
         // Act
-        code.Generate("ABC123", "", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        code.Generate("ABC123", BrokerType.MT4, "", "12345678", "XMGlobal-Demo", null, expiresAt);
     }
 
     [TestMethod]
@@ -117,12 +134,13 @@ public class ActivationCodeAggregateTests
     public void Generate_WithEmptyAccountNumber_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
+        var userId = UserId.New;
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
         // Act
-        code.Generate("ABC123", "XM", "", "XMGlobal-Demo", "user-123", expiresAt);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "", "XMGlobal-Demo", null, expiresAt);
     }
 
     [TestMethod]
@@ -130,51 +148,13 @@ public class ActivationCodeAggregateTests
     public void Generate_WithEmptyServerName_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
+        var userId = UserId.New;
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
         // Act
-        code.Generate("ABC123", "XM", "12345678", "", "user-123", expiresAt);
-    }
-
-    [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
-    public void Generate_WithEmptyUserId_ThrowsException()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-
-        // Act
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "", expiresAt);
-    }
-
-    [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
-    public void Generate_WithPastExpirationTime_ThrowsException()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(-1);
-
-        // Act
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-    }
-
-    [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
-    public void Generate_WithCurrentTimeAsExpiration_ThrowsException()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow;
-
-        // Act
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "", null, expiresAt);
     }
 
     #endregion
@@ -185,13 +165,15 @@ public class ActivationCodeAggregateTests
     public void Confirm_WithValidCode_EmitsActivationCodeConfirmedEvent()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        var confirmedAt = DateTimeOffset.UtcNow;
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", null, expiresAt);
 
         // Act
-        code.Confirm(BrokerType.MT4);
+        code.Confirm(userId, confirmedAt);
 
         // Assert
         var events = code.UncommittedEvents.ToList();
@@ -199,24 +181,27 @@ public class ActivationCodeAggregateTests
         Assert.IsInstanceOfType(events[1].AggregateEvent, typeof(ActivationCodeConfirmedEvent));
 
         var evt = (ActivationCodeConfirmedEvent)events[1].AggregateEvent;
-        Assert.AreEqual("user-123", evt.UserId);
-        Assert.AreEqual(BrokerType.MT4, evt.BrokerType);
+        Assert.AreEqual(userId, evt.UserId);
+        Assert.AreEqual(confirmedAt, evt.ConfirmedAt);
     }
 
     [TestMethod]
     public void Confirm_AppliesEventCorrectly()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        var confirmedAt = DateTimeOffset.UtcNow;
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", null, expiresAt);
 
         // Act
-        code.Confirm(BrokerType.MT5);
+        code.Confirm(userId, confirmedAt);
 
         // Assert
         Assert.AreEqual(ActivationCodeStatus.Confirmed, code.Status);
+        Assert.AreEqual(userId, code.UserId);
         Assert.IsNotNull(code.ConfirmedAt);
     }
 
@@ -225,14 +210,16 @@ public class ActivationCodeAggregateTests
     public void Confirm_WhenAlreadyConfirmed_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-        code.Confirm(BrokerType.MT4);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        var confirmedAt = DateTimeOffset.UtcNow;
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
+        code.Confirm(userId, confirmedAt);
 
         // Act
-        code.Confirm(BrokerType.MT5);
+        code.Confirm(userId, confirmedAt);
     }
 
     [TestMethod]
@@ -240,16 +227,15 @@ public class ActivationCodeAggregateTests
     public void Confirm_OnExpiredCode_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddSeconds(1);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-        
-        // Wait for expiration
-        System.Threading.Thread.Sleep(1100);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow;
+        var confirmedAt = DateTimeOffset.UtcNow.AddSeconds(1);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
 
         // Act
-        code.Confirm(BrokerType.MT4);
+        code.Confirm(userId, confirmedAt);
     }
 
     #endregion
@@ -260,10 +246,11 @@ public class ActivationCodeAggregateTests
     public void Expire_OnPendingCode_EmitsActivationCodeExpiredEvent()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
 
         // Act
         code.Expire();
@@ -278,10 +265,11 @@ public class ActivationCodeAggregateTests
     public void Expire_AppliesEventCorrectly()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
 
         // Act
         code.Expire();
@@ -295,10 +283,11 @@ public class ActivationCodeAggregateTests
     public void Expire_WhenAlreadyExpired_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
+        var userId = UserId.New;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
         code.Expire();
 
         // Act
@@ -310,87 +299,16 @@ public class ActivationCodeAggregateTests
     public void Expire_OnConfirmedCode_ThrowsException()
     {
         // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
+        var codeId = ActivationCodeId.New;
         var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-        code.Confirm(BrokerType.MT4);
+        var userId = UserId.New;
+        var confirmedAt = DateTimeOffset.UtcNow;
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(24);
+        code.Generate("ABC123", BrokerType.MT4, "XM", "12345678", "XMGlobal-Demo", userId, expiresAt);
+        code.Confirm(userId, confirmedAt);
 
         // Act
         code.Expire();
-    }
-
-    #endregion
-
-    #region IsValid Tests
-
-    [TestMethod]
-    public void IsValid_OnPendingCode_ReturnsTrue()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-
-        // Act
-        var isValid = code.IsValid();
-
-        // Assert
-        Assert.IsTrue(isValid);
-    }
-
-    [TestMethod]
-    public void IsValid_OnConfirmedCode_ReturnsFalse()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-        code.Confirm(BrokerType.MT4);
-
-        // Act
-        var isValid = code.IsValid();
-
-        // Assert
-        Assert.IsFalse(isValid);
-    }
-
-    [TestMethod]
-    public void IsValid_OnExpiredCode_ReturnsFalse()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-        code.Expire();
-
-        // Act
-        var isValid = code.IsValid();
-
-        // Assert
-        Assert.IsFalse(isValid);
-    }
-
-    [TestMethod]
-    public void IsValid_OnPastExpirationTime_ReturnsFalse()
-    {
-        // Arrange
-        var codeId = new ActivationCodeId($"activationcode-{Guid.NewGuid()}");
-        var code = new ActivationCodeAggregate(codeId);
-        var expiresAt = DateTime.UtcNow.AddSeconds(1);
-        code.Generate("ABC123", "XM", "12345678", "XMGlobal-Demo", "user-123", expiresAt);
-
-        // Wait for expiration
-        System.Threading.Thread.Sleep(1100);
-
-        // Act
-        var isValid = code.IsValid();
-
-        // Assert
-        Assert.IsFalse(isValid);
     }
 
     #endregion

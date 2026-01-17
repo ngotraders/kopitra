@@ -111,7 +111,7 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     /// <summary>
     /// Issue refresh token for this user
     /// </summary>
-    public void IssueRefreshToken(string sessionId, string refreshToken, DateTime expiresAt)
+    public void IssueRefreshToken(string sessionId, string refreshToken, DateTimeOffset expiresAt)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session id is required.", nameof(sessionId));

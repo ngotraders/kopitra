@@ -3,7 +3,6 @@ using EventFlow.Queries;
 using Kopitra.Api.Application.Users.Commands;
 using Kopitra.Api.Application.Users.Queries;
 using Kopitra.Api.Domain.ValueObjects;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Kopitra.Api.Tests.Unit.Application.Users;
 
@@ -43,7 +42,7 @@ public class IssueRefreshTokenCommandTests
 
         var sessionId = Guid.NewGuid().ToString("N");
         var refreshToken = Guid.NewGuid().ToString("N");
-        var expiresAt = DateTime.UtcNow.AddDays(30);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(30);
         var command = new IssueRefreshTokenCommand(userId)
         {
             SessionId = sessionId,
@@ -84,7 +83,7 @@ public class IssueRefreshTokenCommandTests
         {
             SessionId = sessionId,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddDays(30)
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30)
         };
         await _commandBus.PublishAsync(command, CancellationToken.None);
 
@@ -123,7 +122,7 @@ public class IssueRefreshTokenCommandTests
         {
             SessionId = Guid.NewGuid().ToString("N"),
             RefreshToken = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTime.UtcNow.AddDays(30)
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30)
         };
 
         // Act & Assert

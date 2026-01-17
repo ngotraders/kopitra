@@ -17,20 +17,24 @@ public enum ConnectionStatus
 /// <summary>
 /// Account aggregate - represents a single trading account (MT4/MT5) for a user
 /// </summary>
-public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
+public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>,
+    IApply<AccountRegisteredEvent>,
+    IApply<AccountActivationInitiatedEvent>,
+    IApply<AccountActivationConfirmedEvent>,
+    IApply<AccountBalanceUpdatedEvent>,
+    IApply<AccountInfoUpdatedEvent>,
+    IApply<AccountDeletedEvent>
 {
     public UserId UserId { get; private set; } = null!;
     public BrokerType BrokerType { get; private set; }
     public string BrokerName { get; private set; } = null!;
     public string AccountNumber { get; private set; } = null!;
     public string ServerName { get; private set; } = null!;
-    public string? ApiKey { get; private set; }
-    public string? ApiSecret { get; private set; }
     public decimal Balance { get; private set; } = 0;
     public bool IsConnected { get; private set; } = false;
     public ConnectionStatus ConnectionStatus { get; private set; } = ConnectionStatus.NotConnected;
-    public DateTime? LastSyncedAt { get; private set; }
-    public DateTime? LastVerifiedAt { get; private set; }
+    public DateTimeOffset? LastSyncedAt { get; private set; }
+    public DateTimeOffset? LastVerifiedAt { get; private set; }
     public bool IsDeleted { get; private set; } = false;
 
     public AccountAggregate(AccountId id) : base(id)
@@ -40,8 +44,12 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
     /// <summary>
     /// Register a new trading account (Flow 1: Pre-configured)
     /// </summary>
-    public void Register(UserId userId, BrokerType brokerType, string brokerName, 
-        string accountNumber, string serverName, string? apiKey = null, string? apiSecret = null)
+    public void Register(
+        UserId userId, 
+        BrokerType brokerType, 
+        string brokerName, 
+        string accountNumber, 
+        string serverName)
     {
         if (userId == null)
             throw new ArgumentNullException(nameof(userId));
@@ -59,8 +67,6 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
             BrokerName = brokerName,
             AccountNumber = accountNumber,
             ServerName = serverName,
-            ApiKey = apiKey,
-            ApiSecret = apiSecret,
         });
     }
 
@@ -140,25 +146,27 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
     /// <summary>
     /// Update account information
     /// </summary>
-    public void UpdateInfo(string? accountNumber = null, string? serverName = null, 
-        string? apiKey = null, string? apiSecret = null)
+    public void UpdateInfo(
+        BrokerType? brokerType = null,
+        string? brokerName = null,
+        string? accountNumber = null,
+        string? serverName = null)
     {
         if (IsDeleted)
             throw new InvalidOperationException("Cannot update a deleted account.");
 
         // At least one field should be provided
-        if (string.IsNullOrWhiteSpace(accountNumber) && string.IsNullOrWhiteSpace(serverName) &&
-            string.IsNullOrWhiteSpace(apiKey) && string.IsNullOrWhiteSpace(apiSecret))
+        if (!brokerType.HasValue && string.IsNullOrWhiteSpace(brokerName) && string.IsNullOrWhiteSpace(accountNumber) && string.IsNullOrWhiteSpace(serverName))
         {
-            throw new ArgumentException("At least one field must be provided.", nameof(accountNumber));
+            throw new ArgumentException("At least one field must be provided.");
         }
 
         Emit(new AccountInfoUpdatedEvent
         {
+            BrokerType = brokerType,
+            BrokerName = brokerName,
             AccountNumber = accountNumber,
             ServerName = serverName,
-            ApiKey = apiKey,
-            ApiSecret = apiSecret,
         });
     }
 
@@ -177,21 +185,19 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
     }
 
     // Event application
-    private void Apply(AccountRegisteredEvent @event)
+    public void Apply(AccountRegisteredEvent @event)
     {
         UserId = @event.UserId;
         BrokerType = @event.BrokerType;
         BrokerName = @event.BrokerName;
         AccountNumber = @event.AccountNumber;
         ServerName = @event.ServerName;
-        ApiKey = @event.ApiKey;
-        ApiSecret = @event.ApiSecret;
         IsConnected = false;
         ConnectionStatus = ConnectionStatus.TestPending;
         Balance = 0;
     }
 
-    private void Apply(AccountActivationInitiatedEvent @event)
+    public void Apply(AccountActivationInitiatedEvent @event)
     {
         BrokerName = @event.BrokerName;
         AccountNumber = @event.AccountNumber;
@@ -199,14 +205,14 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
         ConnectionStatus = ConnectionStatus.NotConnected;
     }
 
-    private void Apply(AccountActivationConfirmedEvent @event)
+    public void Apply(AccountActivationConfirmedEvent @event)
     {
         UserId = @event.UserId;
         BrokerType = @event.BrokerType;
         ConnectionStatus = ConnectionStatus.TestPending;
     }
 
-    private void Apply(AccountConnectionVerifiedEvent @event)
+    public void Apply(AccountConnectionVerifiedEvent @event)
     {
         IsConnected = @event.IsConnected;
         Balance = @event.CurrentBalance;
@@ -214,25 +220,25 @@ public class AccountAggregate : AggregateRoot<AccountAggregate, AccountId>
         ConnectionStatus = @event.IsConnected ? ConnectionStatus.Connected : ConnectionStatus.NotConnected;
     }
 
-    private void Apply(AccountBalanceUpdatedEvent @event)
+    public void Apply(AccountBalanceUpdatedEvent @event)
     {
         Balance = @event.Balance;
         LastSyncedAt = @event.SyncedAt;
     }
 
-    private void Apply(AccountInfoUpdatedEvent @event)
+    public void Apply(AccountInfoUpdatedEvent @event)
     {
+        if (@event.BrokerType.HasValue)
+            BrokerType = @event.BrokerType.Value;
+        if (!string.IsNullOrWhiteSpace(@event.BrokerName))
+            BrokerName = @event.BrokerName;
         if (!string.IsNullOrWhiteSpace(@event.AccountNumber))
             AccountNumber = @event.AccountNumber;
         if (!string.IsNullOrWhiteSpace(@event.ServerName))
             ServerName = @event.ServerName;
-        if (!string.IsNullOrWhiteSpace(@event.ApiKey))
-            ApiKey = @event.ApiKey;
-        if (!string.IsNullOrWhiteSpace(@event.ApiSecret))
-            ApiSecret = @event.ApiSecret;
     }
 
-    private void Apply(AccountDeletedEvent @event)
+    public void Apply(AccountDeletedEvent @event)
     {
         IsDeleted = true;
     }
