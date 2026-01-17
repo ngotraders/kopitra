@@ -2,7 +2,7 @@ using Kopitra.Api.Domain.Users;
 using Kopitra.Api.Domain.Users.Events;
 using Kopitra.Api.Domain.ValueObjects;
 
-namespace Kopitra.Api.Tests.Unit.Domain;
+namespace Kopitra.Api.Tests.Unit.Domain.Users;
 
 [TestClass]
 public class UserAggregateTests

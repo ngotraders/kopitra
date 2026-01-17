@@ -101,6 +101,8 @@ public static class ServiceCollectionExtension
                 typeof(Accounts.Commands.ConfirmActivationCodeCommandHandler),
                 typeof(Accounts.Commands.ExpireActivationCodeCommandHandler)
             );
+            ef.UseEntityFrameworkReadModel<Accounts.Queries.AccountReadModel, KopitraDbContext>();
+            ef.UseEntityFrameworkReadModel<Accounts.Queries.ActivationCodeReadModel, KopitraDbContext>();
             ef.AddQueryHandlers(
                 typeof(Accounts.Queries.GetAccountsByUserIdQueryHandler),
                 typeof(Accounts.Queries.GetAccountByIdQueryHandler),

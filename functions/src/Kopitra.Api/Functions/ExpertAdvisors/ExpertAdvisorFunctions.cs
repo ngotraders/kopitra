@@ -1,18 +1,15 @@
+using EventFlow;
+using EventFlow.Queries;
+using Kopitra.Api.Application.ExpertAdvisors.Commands;
+using Kopitra.Api.Application.ExpertAdvisors.Queries;
+using Kopitra.Api.Domain.ExpertAdvisors;
+using Kopitra.Api.Functions.ExpertAdvisors.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
-using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
-using EventFlow.Commands;
-using EventFlow.Queries;
-using EventFlow;
-using Kopitra.Api.Domain.ExpertAdvisors;
-using Kopitra.Api.Application.ExpertAdvisors.Commands;
-using Kopitra.Api.Application.ExpertAdvisors.Queries;
-using Kopitra.Api.Functions.ExpertAdvisors.Models;
 using System.Net;
-using System.ComponentModel.DataAnnotations;
 
 namespace Kopitra.Api.Functions.ExpertAdvisors;
 
