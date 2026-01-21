@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace Kopitra.Api.Application.Users.Services;
 
 /// <summary>
@@ -9,17 +11,17 @@ public interface IAuthorizationService
     /// <summary>
     /// Check if requesting user is admin
     /// </summary>
-    bool IsAdmin(string requestingstring);
+    Task<bool> IsAdminAsync(string requestingstring);
 
     /// <summary>
     /// Check if requesting user can manage target user (self or admin)
     /// </summary>
-    bool CanManageUser(string requestingstring, string targetstring);
+    Task<bool> CanManageUserAsync(string requestingstring, string targetstring);
 
     /// <summary>
     /// Check if requesting user can view target user data (self or admin)
     /// </summary>
-    bool CanViewUser(string requestingstring, string targetstring);
+    Task<bool> CanViewUserAsync(string requestingstring, string targetstring);
 
     /// <summary>
     /// Check if user has provider role
@@ -39,5 +41,5 @@ public interface IAuthorizationService
     /// <summary>
     /// Check if requesting user can perform admin actions (permission changes, deactivation, etc.)
     /// </summary>
-    bool CanPerformAdminActions(string requestingstring);
+    Task<bool> CanPerformAdminActionsAsync(string requestingstring);
 }

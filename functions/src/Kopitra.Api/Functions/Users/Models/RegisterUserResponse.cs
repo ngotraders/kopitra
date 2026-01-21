@@ -18,5 +18,5 @@ public class RegisterUserResponse
     /// <summary>
     /// User display name.
     /// </summary>
-    public string DisplayName { get; set; } = null!;
+    public string Name { get; set; } = null!;
 }

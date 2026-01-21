@@ -1,3 +1,11 @@
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using EventFlow.Queries;
+using Kopitra.Api.Application.Users.Queries;
+
 namespace Kopitra.Api.Application.Users.Services;
 
 /// <summary>
@@ -6,29 +14,50 @@ namespace Kopitra.Api.Application.Users.Services;
 /// </summary>
 public class AuthorizationService : IAuthorizationService
 {
-    // This would normally be injected with actual user repository
+    private readonly IQueryProcessor _queryProcessor;
+
+    // Local admin cache for tests/setup; only a fallback
     private readonly HashSet<string> _admins = new();
 
-    public AuthorizationService()
+    public AuthorizationService(IQueryProcessor queryProcessor)
     {
-        // In real implementation, load admin users from database
+        _queryProcessor = queryProcessor ?? throw new ArgumentNullException(nameof(queryProcessor));
     }
 
-    public bool IsAdmin(string requestingUserId)
+    /// <summary>
+    /// Check latest read model for whether the user is an admin (no caching)
+    /// </summary>
+    public async Task<bool> IsAdminAsync(string requestingUserId)
     {
+        if (string.IsNullOrWhiteSpace(requestingUserId))
+            return false;
+
+        try
+        {
+            var admins = await _queryProcessor.ProcessAsync(new GetUsersByRoleQuery("admin"), CancellationToken.None).ConfigureAwait(false);
+            if (admins != null && admins.Any(u => u.Id == requestingUserId))
+                return true;
+        }
+        catch
+        {
+            // Fall back to local admin cache on errors
+        }
+
         return _admins.Contains(requestingUserId);
     }
 
-    public bool CanManageUser(string requestingUserId, string targetUserId)
+    public async Task<bool> CanManageUserAsync(string requestingUserId, string targetUserId)
     {
-        // User can manage themselves or admin can manage anyone
-        return requestingUserId.Equals(targetUserId) || IsAdmin(requestingUserId);
+        if (requestingUserId == null) return false;
+        if (requestingUserId.Equals(targetUserId)) return true;
+        return await IsAdminAsync(requestingUserId).ConfigureAwait(false);
     }
 
-    public bool CanViewUser(string requestingUserId, string targetUserId)
+    public async Task<bool> CanViewUserAsync(string requestingUserId, string targetUserId)
     {
-        // User can view themselves or admin can view anyone
-        return requestingUserId.Equals(targetUserId) || IsAdmin(requestingUserId);
+        if (requestingUserId == null) return false;
+        if (requestingUserId.Equals(targetUserId)) return true;
+        return await IsAdminAsync(requestingUserId).ConfigureAwait(false);
     }
 
     public bool HasProviderRole(string userId)
@@ -49,24 +78,27 @@ public class AuthorizationService : IAuthorizationService
         return true;
     }
 
-    public bool CanPerformAdminActions(string requestingUserId)
+    public Task<bool> CanPerformAdminActionsAsync(string requestingUserId)
     {
-        return IsAdmin(requestingUserId);
+        return IsAdminAsync(requestingUserId);
     }
 
     /// <summary>
     /// Register a user as admin (for setup/testing)
+    /// This only affects the local fallback cache; preferred source is the read model
     /// </summary>
     public void RegisterAdmin(string adminUserId)
     {
-        _admins.Add(adminUserId);
+        if (!string.IsNullOrWhiteSpace(adminUserId))
+            _admins.Add(adminUserId);
     }
 
     /// <summary>
-    /// Unregister admin (revoke admin rights)
+    /// Unregister admin (revoke admin rights) from local cache
     /// </summary>
     public void UnregisterAdmin(string adminUserId)
     {
-        _admins.Remove(adminUserId);
+        if (!string.IsNullOrWhiteSpace(adminUserId))
+            _admins.Remove(adminUserId);
     }
 }

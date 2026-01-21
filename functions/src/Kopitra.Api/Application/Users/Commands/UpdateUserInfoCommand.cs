@@ -11,7 +11,7 @@ namespace Kopitra.Api.Application.Users.Commands;
 public class UpdateUserInfoCommand : Command<UserAggregate, UserId>
 {
     public string? Email { get; set; }
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
 
     public UpdateUserInfoCommand(UserId aggregateId) : base(aggregateId) { }
 }

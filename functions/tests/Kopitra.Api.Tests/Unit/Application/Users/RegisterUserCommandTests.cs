@@ -36,7 +36,7 @@ public class RegisterUserCommandTests
         var command = new RegisterUserCommand(userId)
         {
             Email = "test@example.com",
-            DisplayName = "Test User",
+            Name = "Test User",
             PasswordHash = "hashed_password_123"
         };
 
@@ -50,7 +50,7 @@ public class RegisterUserCommandTests
         Assert.IsNotNull(user);
         Assert.AreEqual(userId.Value, user.Id);
         Assert.AreEqual("test@example.com", user.Email);
-        Assert.AreEqual("Test User", user.DisplayName);
+        Assert.AreEqual("Test User", user.Name);
         Assert.AreEqual("hashed_password_123", user.PasswordHash);
         Assert.IsTrue(user.IsActive);
         Assert.IsTrue(user.Roles.Contains("Subscriber"));
@@ -67,7 +67,7 @@ public class RegisterUserCommandTests
         var command = new RegisterUserCommand(userId)
         {
             Email = "timestamp@example.com",
-            DisplayName = "Timestamp Test",
+            Name = "Timestamp Test",
             PasswordHash = "hashed_password_456"
         };
 
@@ -95,21 +95,21 @@ public class RegisterUserCommandTests
         var command1 = new RegisterUserCommand(user1Id)
         {
             Email = "user1@example.com",
-            DisplayName = "User One",
+            Name = "User One",
             PasswordHash = "hash1"
         };
 
         var command2 = new RegisterUserCommand(user2Id)
         {
             Email = "user2@example.com",
-            DisplayName = "User Two",
+            Name = "User Two",
             PasswordHash = "hash2"
         };
 
         var command3 = new RegisterUserCommand(user3Id)
         {
             Email = "user3@example.com",
-            DisplayName = "User Three",
+            Name = "User Three",
             PasswordHash = "hash3"
         };
 
@@ -138,7 +138,7 @@ public class RegisterUserCommandTests
         var command = new RegisterUserCommand(userId)
         {
             Email = email,
-            DisplayName = "Query Test",
+            Name = "Query Test",
             PasswordHash = "hash_query"
         };
 

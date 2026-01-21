@@ -9,5 +9,5 @@ namespace Kopitra.Api.Domain.Users.Events;
 public class UserInfoUpdatedEvent : AggregateEvent<UserAggregate, UserId>
 {
     public string? Email { get; set; }
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
 }

@@ -36,7 +36,7 @@ public class ReactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "reactivate@example.com",
-            DisplayName = "Reactivate Test",
+            Name = "Reactivate Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -73,7 +73,7 @@ public class ReactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "alreadyactive@example.com",
-            DisplayName = "Already Active",
+            Name = "Already Active",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -99,7 +99,7 @@ public class ReactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "workflow@example.com",
-            DisplayName = "Workflow Test",
+            Name = "Workflow Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

@@ -7,7 +7,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (email: string, password: string, name: string) => {
     setIsLoading(true);
     try {
-      const response = await authApi.register({ email, password, displayName: name });
+      const response = await authApi.register({ email, password, name });
       setToken(response.accessToken);
     } finally {
       setIsLoading(false);

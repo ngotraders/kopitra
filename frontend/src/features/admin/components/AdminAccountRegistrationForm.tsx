@@ -15,11 +15,7 @@ import {
   Typography,
   Autocomplete,
 } from "@mui/material";
-import {
-  accountManagementApi,
-  type AdminAccountCreateRequest,
-  type AdminUserResponse,
-} from "../../../api";
+import { accountManagementApi, type AdminAccountCreateRequest, type AdminUser } from "../../../api";
 import { userManagementApi } from "../../../api";
 
 interface AccountRegistrationFormProps {
@@ -41,7 +37,7 @@ export const AdminAccountRegistrationForm: React.FC<AccountRegistrationFormProps
     status: "Active",
   });
 
-  const [users, setUsers] = useState<AdminUserResponse[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -71,7 +67,7 @@ export const AdminAccountRegistrationForm: React.FC<AccountRegistrationFormProps
     setError("");
   };
 
-  const handleUserSelect = (user: AdminUserResponse | null) => {
+  const handleUserSelect = (user: AdminUser | null) => {
     if (user) {
       handleInputChange("userId", user.id);
     }

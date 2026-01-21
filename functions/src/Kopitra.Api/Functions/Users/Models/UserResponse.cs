@@ -16,9 +16,9 @@ public class UserResponse
     public string? Email { get; set; }
 
     /// <summary>
-    /// User full name.
+    /// User display name.
     /// </summary>
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
 
     /// <summary>
     /// Whether user has permission to distribute signals (provide/distribute).

@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 import { AuthProvider, useAuth, LoginForm } from "./features/auth";
 import { Layout, ProtectedRoute } from "./components";
-import { Dashboard } from "./routes";
+import { Dashboard, AdminUsers, AdminUserDetailPage } from "./routes";
+import { AdminUserNewDialog } from "./features/admin";
 
 const theme = createTheme({
   palette: {
@@ -18,6 +19,15 @@ const theme = createTheme({
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const [showUserNew, setShowUserNew] = React.useState(false);
+
+  const handleShowNewUser = () => {
+    setShowUserNew(true);
+  };
+
+  const handleNewUserSuccess = () => {
+    setShowUserNew(false);
+  };
 
   return (
     <Routes>
@@ -31,6 +41,33 @@ const AppRoutes: React.FC = () => {
           <ProtectedRoute>
             <Layout>
               <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <>
+                <AdminUsers onCreateNew={handleShowNewUser} />
+                <AdminUserNewDialog
+                  open={showUserNew}
+                  onClose={() => setShowUserNew(false)}
+                  onSuccess={handleNewUserSuccess}
+                />
+              </>
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users/:userId"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <AdminUserDetailPage />
             </Layout>
           </ProtectedRoute>
         }

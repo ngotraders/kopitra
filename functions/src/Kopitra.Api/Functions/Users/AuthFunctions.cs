@@ -81,10 +81,10 @@ public class AuthFunctions
                 return badResponse;
             }
 
-            if (string.IsNullOrWhiteSpace(body.DisplayName))
+            if (string.IsNullOrWhiteSpace(body.Name))
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badResponse.WriteAsJsonAsync(new ApiResponse("Display name is required"));
+                await badResponse.WriteAsJsonAsync(new ApiResponse("Name is required"));
                 return badResponse;
             }
 
@@ -96,7 +96,7 @@ public class AuthFunctions
             var command = new RegisterUserCommand(userId)
             {
                 Email = body.Email,
-                DisplayName = body.DisplayName,
+                Name = body.Name,
                 PasswordHash = passwordHash
             };
 
@@ -108,7 +108,7 @@ public class AuthFunctions
             {
                 UserId = userId.Value,
                 Email = body.Email,
-                DisplayName = body.DisplayName
+                Name = body.Name
             });
             return response;
         }

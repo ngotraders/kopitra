@@ -9,7 +9,7 @@ namespace Kopitra.Api.Domain.Users.Events;
 public class UserRegisteredEvent : AggregateEvent<UserAggregate, UserId>
 {
     public string Email { get; set; } = null!;
-    public string DisplayName { get; set; } = null!;
+    public string Name { get; set; } = null!;
     public string PasswordHash { get; set; } = null!;
     public string[] Roles { get; set; } = Array.Empty<string>();
 }

@@ -71,7 +71,7 @@ public class AccountsFunctions
             }
 
             // Check authorization: user can register their own or admin can register for others
-            if (requestBody.UserId != tokenValues.UserId && !_authorizationService.IsAdmin(tokenValues.UserId))
+            if (requestBody.UserId != tokenValues.UserId && !await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -148,7 +148,7 @@ public class AccountsFunctions
             var userId = !string.IsNullOrEmpty(queryUserId) ? queryUserId : tokenValues.UserId;
 
             // Check authorization: user can view their own accounts or admin can view any
-            if (userId != tokenValues.UserId && !_authorizationService.IsAdmin(tokenValues.UserId))
+            if (userId != tokenValues.UserId && !await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -212,7 +212,7 @@ public class AccountsFunctions
             }
 
             // Check authorization: owner or admin
-            if (account.UserId != tokenValues.UserId && !_authorizationService.IsAdmin(tokenValues.UserId))
+            if (account.UserId != tokenValues.UserId && !await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -272,7 +272,7 @@ public class AccountsFunctions
                 return notFoundResponse;
             }
 
-            if (account.UserId != tokenValues.UserId && !_authorizationService.IsAdmin(tokenValues.UserId))
+            if (account.UserId != tokenValues.UserId && !await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -359,7 +359,7 @@ public class AccountsFunctions
                 return notFoundResponse;
             }
 
-            if (account.UserId != tokenValues.UserId && !_authorizationService.IsAdmin(tokenValues.UserId))
+            if (account.UserId != tokenValues.UserId && !await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;

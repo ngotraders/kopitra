@@ -21,7 +21,7 @@ public class UserReadModel : IReadModel,
 {
     public string Id { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string[] Roles { get; set; } = Array.Empty<string>();
@@ -37,7 +37,7 @@ public class UserReadModel : IReadModel,
         var e = domainEvent.AggregateEvent;
         Id = context.ReadModelId;
         Email = e.Email;
-        DisplayName = e.DisplayName;
+        Name = e.Name;
         PasswordHash = e.PasswordHash;
         Roles = e.Roles;
         IsActive = true;
@@ -88,8 +88,8 @@ public class UserReadModel : IReadModel,
         var e = domainEvent.AggregateEvent;
         if (!string.IsNullOrWhiteSpace(e.Email))
             Email = e.Email;
-        if (!string.IsNullOrWhiteSpace(e.DisplayName))
-            DisplayName = e.DisplayName;
+        if (!string.IsNullOrWhiteSpace(e.Name))
+            Name = e.Name;
         return Task.CompletedTask;
     }
 

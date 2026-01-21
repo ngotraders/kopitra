@@ -11,7 +11,7 @@ public class UpdateUserInfoCommandHandler : CommandHandler<UserAggregate, UserId
 {
     public override Task ExecuteAsync(UserAggregate aggregate, UpdateUserInfoCommand command, CancellationToken cancellationToken)
     {
-        aggregate.UpdateInfo(command.Email, command.DisplayName);
+        aggregate.UpdateInfo(command.Email, command.Name);
         return Task.CompletedTask;
     }
 }

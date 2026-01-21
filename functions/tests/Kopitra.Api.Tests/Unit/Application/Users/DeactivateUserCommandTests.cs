@@ -36,7 +36,7 @@ public class DeactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "deactivate@example.com",
-            DisplayName = "Deactivate Test",
+            Name = "Deactivate Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -66,7 +66,7 @@ public class DeactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "doubleDe@example.com",
-            DisplayName = "Double Deactivate",
+            Name = "Double Deactivate",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -99,7 +99,7 @@ public class DeactivateUserCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "timestamp@example.com",
-            DisplayName = "Timestamp Test",
+            Name = "Timestamp Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

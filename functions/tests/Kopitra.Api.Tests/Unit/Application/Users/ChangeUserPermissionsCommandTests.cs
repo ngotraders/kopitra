@@ -36,7 +36,7 @@ public class ChangeUserPermissionsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "permissions@example.com",
-            DisplayName = "Permissions Test",
+            Name = "Permissions Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -66,7 +66,7 @@ public class ChangeUserPermissionsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "disable@example.com",
-            DisplayName = "Disable Test",
+            Name = "Disable Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -105,7 +105,7 @@ public class ChangeUserPermissionsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "both@example.com",
-            DisplayName = "Both Permissions",
+            Name = "Both Permissions",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -136,7 +136,7 @@ public class ChangeUserPermissionsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "nullperms@example.com",
-            DisplayName = "Null Perms",
+            Name = "Null Perms",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

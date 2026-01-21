@@ -13,7 +13,7 @@ export const Dashboard: React.FC = () => {
         </Typography>
         <Paper sx={{ p: 3, mt: 3 }}>
           <Typography variant="h6" gutterBottom>
-            ようこそ、{user?.displayName}さん
+            ようこそ、{user?.name}さん
           </Typography>
           <Typography variant="body1" color="text.secondary">
             メールアドレス: {user?.email}

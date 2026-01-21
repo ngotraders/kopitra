@@ -36,7 +36,7 @@ public class RecordUserLoginCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "login@example.com",
-            DisplayName = "Login Test",
+            Name = "Login Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -62,7 +62,7 @@ public class RecordUserLoginCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "timestamp@example.com",
-            DisplayName = "Timestamp Test",
+            Name = "Timestamp Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -92,7 +92,7 @@ public class RecordUserLoginCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "multilogin@example.com",
-            DisplayName = "Multi Login",
+            Name = "Multi Login",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -129,7 +129,7 @@ public class RecordUserLoginCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "inactivelogin@example.com",
-            DisplayName = "Inactive Login",
+            Name = "Inactive Login",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

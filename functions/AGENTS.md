@@ -1632,7 +1632,7 @@ This section provides a complete implementation example of the User Management f
 public class UserInfoUpdatedEvent : AggregateEvent<UserAggregate, UserId>
 {
     public string? Email { get; set; }
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -1664,19 +1664,19 @@ public class AdminDirectChangeAppliedEvent : AggregateEvent<UserAggregate, UserI
 public class UserAggregate : AggregateRoot<UserAggregate, UserId>
 {
     public string Email { get; private set; } = null!;
-    public string DisplayName { get; private set; } = null!;
+    public string Name { get; private set; } = null!;
     public bool IsProviderEnabled { get; private set; }
 
     // ユーザー情報更新（本人またはAdmin）
-    public void UpdateInfo(string? email, string? displayName)
+    public void UpdateInfo(string? email, string? name)
     {
-        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(displayName))
+        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("At least one field must be provided.");
 
         Emit(new UserInfoUpdatedEvent
         {
             Email = email,
-            DisplayName = displayName,
+            Name = name,
             UpdatedAt = DateTime.UtcNow
         });
     }
@@ -1727,8 +1727,8 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     {
         if (!string.IsNullOrWhiteSpace(domainEvent.Email))
             Email = domainEvent.Email;
-        if (!string.IsNullOrWhiteSpace(domainEvent.DisplayName))
-            DisplayName = domainEvent.DisplayName;
+        if (!string.IsNullOrWhiteSpace(domainEvent.Name))
+            Name = domainEvent.Name;
     }
 
     private void Apply(AdminDirectChangeAppliedEvent domainEvent)
@@ -1746,7 +1746,7 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
 public class UpdateUserInfoCommand : Command<UserAggregate, UserId>
 {
     public string? Email { get; set; }
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
     public UserId? RequestingAdminId { get; set; }  // Admin による変更の場合のみ設定
     public string? AdminMemo { get; set; }
 
@@ -1767,14 +1767,14 @@ public class UpdateUserInfoCommandHandler : CommandHandler<UserAggregate, UserId
             var oldValues = new Dictionary<string, object>
             {
                 { "email", aggregate.Email },
-                { "displayName", aggregate.DisplayName }
+                { "name", aggregate.Name }
             };
 
             var newValues = new Dictionary<string, object>();
             if (!string.IsNullOrWhiteSpace(command.Email))
                 newValues["email"] = command.Email;
-            if (!string.IsNullOrWhiteSpace(command.DisplayName))
-                newValues["displayName"] = command.DisplayName;
+            if (!string.IsNullOrWhiteSpace(command.Name))
+                newValues["name"] = command.Name;
 
             aggregate.AdminDirectChange(
                 command.RequestingAdminId,
@@ -1786,7 +1786,7 @@ public class UpdateUserInfoCommandHandler : CommandHandler<UserAggregate, UserId
         else
         {
             // ユーザー自身による更新
-            aggregate.UpdateInfo(command.Email, command.DisplayName);
+            aggregate.UpdateInfo(command.Email, command.Name);
         }
 
         return Task.CompletedTask;

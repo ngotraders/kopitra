@@ -36,7 +36,7 @@ public class EnableProviderCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "provider@example.com",
-            DisplayName = "Provider Test",
+            Name = "Provider Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -66,7 +66,7 @@ public class EnableProviderCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "double@example.com",
-            DisplayName = "Double Enable",
+            Name = "Double Enable",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -97,7 +97,7 @@ public class EnableProviderCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "queryProvider@example.com",
-            DisplayName = "Query Provider",
+            Name = "Query Provider",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

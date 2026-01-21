@@ -27,5 +27,5 @@ public class RegisterUserRequest
     /// User display name.
     /// </summary>
     [Required(ErrorMessage = "Display name is required")]
-    public string? DisplayName { get; set; }
+    public string? Name { get; set; }
 }

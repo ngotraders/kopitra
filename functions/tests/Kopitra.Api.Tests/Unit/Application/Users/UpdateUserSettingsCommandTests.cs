@@ -36,7 +36,7 @@ public class UpdateUserSettingsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "settings@example.com",
-            DisplayName = "Settings Test",
+            Name = "Settings Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -73,7 +73,7 @@ public class UpdateUserSettingsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "multisettings@example.com",
-            DisplayName = "Multi Settings",
+            Name = "Multi Settings",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -108,7 +108,7 @@ public class UpdateUserSettingsCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "empty@example.com",
-            DisplayName = "Empty Settings",
+            Name = "Empty Settings",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

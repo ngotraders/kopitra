@@ -8,7 +8,7 @@ namespace Kopitra.Api.Application.Users.Commands
     {
         public override Task ExecuteAsync(UserAggregate aggregate, RegisterUserCommand command, CancellationToken cancellationToken)
         {
-            aggregate.Register(command.Email, command.DisplayName, command.PasswordHash);
+            aggregate.Register(command.Email, command.Name, command.PasswordHash);
             return Task.CompletedTask;
         }
     }

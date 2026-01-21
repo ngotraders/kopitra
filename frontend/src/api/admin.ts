@@ -4,21 +4,26 @@ import { apiClient } from "./client";
 export interface AdminUserCreateRequest {
   email: string;
   name: string;
-  role: "Admin" | "User";
+  role?: "Admin" | "User";
   initialPassword?: string;
 }
 
-export interface AdminUserResponse {
+export interface AdminUser {
   id: string;
   email: string;
   name: string;
-  role: "Admin" | "User";
-  createdAt: string;
-  updatedAt: string;
+  role?: "Admin" | "User";
+  canProvide?: boolean;
+  canSubscribe?: boolean;
+  isActive?: boolean;
+  registeredAt?: string;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AdminUserListResponse {
-  users: AdminUserResponse[];
+  users: AdminUser[];
   total: number;
   page: number;
   pageSize: number;
@@ -29,6 +34,37 @@ export interface AdminUserUpdateRequest {
   role?: "Admin" | "User";
   email?: string;
 }
+
+type AdminUserApiResponse = {
+  userId?: string;
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: "Admin" | "User";
+  canProvide?: boolean;
+  canSubscribe?: boolean;
+  isActive?: boolean;
+  registeredAt?: string;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const normalizeAdminUser = (u: AdminUserApiResponse): AdminUser => {
+  return {
+    id: u.userId ?? u.id ?? "",
+    email: u.email ?? "",
+    name: u.name ?? "",
+    role: u.role,
+    canProvide: u.canProvide,
+    canSubscribe: u.canSubscribe,
+    isActive: u.isActive,
+    registeredAt: u.registeredAt,
+    lastLoginAt: u.lastLoginAt ?? null,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+  };
+};
 
 // アカウント（取引口座）管理用型定義
 export interface AdminAccountCreateRequest {
@@ -68,8 +104,9 @@ export interface AdminAccountUpdateRequest {
 
 // ユーザー管理API
 export const userManagementApi = {
-  async createUser(data: AdminUserCreateRequest): Promise<AdminUserResponse> {
-    return apiClient.post<AdminUserResponse>("/api/users", data);
+  async createUser(data: AdminUserCreateRequest): Promise<AdminUser> {
+    const res = await apiClient.post<AdminUserApiResponse>("/users", data);
+    return normalizeAdminUser(res);
   },
 
   async listUsers(
@@ -84,26 +121,51 @@ export const userManagementApi = {
     if (search) {
       params.append("search", search);
     }
-    return apiClient.get<AdminUserListResponse>(`/api/users?${params.toString()}`);
+    const res = await apiClient.get<AdminUserApiResponse[] | AdminUserListResponse>(
+      `/users?${params.toString()}`
+    );
+
+    // Backend currently returns an array; normalize either shape
+    if (Array.isArray(res)) {
+      const users = res.map(normalizeAdminUser);
+      const start = (page - 1) * pageSize;
+      const paged = users.slice(start, start + pageSize);
+      return {
+        users: paged,
+        total: users.length,
+        page,
+        pageSize,
+      };
+    }
+
+    if (res && "users" in res) {
+      return {
+        users: res.users.map(normalizeAdminUser),
+        total: res.total,
+        page: res.page,
+        pageSize: res.pageSize,
+      };
+    }
+
+    return { users: [], total: 0, page, pageSize };
   },
 
-  async getUser(userId: string): Promise<AdminUserResponse> {
-    return apiClient.get<AdminUserResponse>(`/api/users/${userId}`);
+  async getUser(userId: string): Promise<AdminUser> {
+    const res = await apiClient.get<AdminUserApiResponse>(`/users/${userId}`);
+    return normalizeAdminUser(res);
   },
 
-  async updateUser(userId: string, data: AdminUserUpdateRequest): Promise<AdminUserResponse> {
-    return apiClient.put<AdminUserResponse>(`/api/users/${userId}`, data);
+  async updateUser(userId: string, data: AdminUserUpdateRequest): Promise<AdminUser> {
+    const res = await apiClient.put<AdminUserApiResponse>(`/users/${userId}`, data);
+    return normalizeAdminUser(res);
   },
 
   async deleteUser(userId: string): Promise<void> {
-    return apiClient.delete<void>(`/api/users/${userId}`);
+    return apiClient.delete<void>(`/users/${userId}`);
   },
 
   async resetPassword(userId: string): Promise<{ temporaryPassword: string }> {
-    return apiClient.post<{ temporaryPassword: string }>(
-      `/api/users/${userId}/reset-password`,
-      {}
-    );
+    return apiClient.post<{ temporaryPassword: string }>(`/users/${userId}/reset-password`, {});
   },
 };
 

@@ -79,7 +79,7 @@ public class UsersFunctions
             {
                 UserId = user.Id,
                 Email = user.Email,
-                DisplayName = user.DisplayName,
+                Name = user.Name,
                 CanProvide = user.CanProvide,
                 CanSubscribe = user.CanSubscribe,
                 IsActive = user.IsActive,
@@ -127,7 +127,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(tokenValues.UserId))
+            if (!await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -142,7 +142,7 @@ public class UsersFunctions
             {
                 UserId = u.Id,
                 Email = u.Email,
-                DisplayName = u.DisplayName,
+                Name = u.Name,
                 CanProvide = u.CanProvide,
                 CanSubscribe = u.CanSubscribe,
                 IsActive = u.IsActive,
@@ -191,7 +191,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.CanViewUser(tokenValues.UserId, userId))
+            if (!await _authorizationService.CanViewUserAsync(tokenValues.UserId, userId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -205,7 +205,7 @@ public class UsersFunctions
             {
                 UserId = user.Id,
                 Email = user.Email,
-                DisplayName = user.DisplayName,
+                Name = user.Name,
                 CanProvide = user.CanProvide,
                 CanSubscribe = user.CanSubscribe,
                 IsActive = user.IsActive,
@@ -254,7 +254,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.CanManageUser(tokenValues.UserId, userId))
+            if (!await _authorizationService.CanManageUserAsync(tokenValues.UserId, userId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -272,7 +272,7 @@ public class UsersFunctions
             var command = new UpdateUserInfoCommand(targetUserId)
             {
                 Email = body.Email,
-                DisplayName = body.DisplayName
+                Name = body.Name
             };
 
             await _commandBus.PublishAsync(command, CancellationToken.None);
@@ -317,7 +317,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(tokenValues.UserId))
+            if (!await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -338,7 +338,7 @@ public class UsersFunctions
             var command = new RegisterUserCommand(userId)
             {
                 Email = body.Email!,
-                DisplayName = body.DisplayName!,
+                Name = body.Name!,
                 PasswordHash = passwordHash
             };
 
@@ -346,7 +346,7 @@ public class UsersFunctions
 
             var response = req.CreateResponse(HttpStatusCode.Created);
             response.Headers.Add("Location", $"/api/users/{userId.Value}");
-            await response.WriteAsJsonAsync(new RegisterResponse { UserId = userId.Value, Email = body.Email, DisplayName = body.DisplayName });
+            await response.WriteAsJsonAsync(new RegisterResponse { UserId = userId.Value, Email = body.Email, Name = body.Name });
             return response;
         }
         catch (Exception ex)
@@ -386,7 +386,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(tokenValues.UserId))
+            if (!await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -450,7 +450,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(tokenValues.UserId))
+            if (!await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;
@@ -526,7 +526,7 @@ public class UsersFunctions
                 return unauthorizedResponse;
             }
 
-            if (!_authorizationService.IsAdmin(tokenValues.UserId))
+            if (!await _authorizationService.IsAdminAsync(tokenValues.UserId))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 return forbiddenResponse;

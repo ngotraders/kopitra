@@ -35,7 +35,7 @@ public class RevokeRefreshTokenCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "token@example.com",
-            DisplayName = "Token Test",
+            Name = "Token Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -75,7 +75,7 @@ public class RevokeRefreshTokenCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "querytoken@example.com",
-            DisplayName = "Query Token",
+            Name = "Query Token",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);

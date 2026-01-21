@@ -142,7 +142,7 @@ namespace Kopitra.Api.Migrations
                     b.Property<bool>("CanSubscribe")
                         .HasColumnType("bit");
 
-                    b.Property<string>("DisplayName")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

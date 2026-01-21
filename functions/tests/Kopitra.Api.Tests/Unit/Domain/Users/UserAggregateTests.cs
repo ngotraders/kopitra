@@ -54,11 +54,11 @@ public class UserAggregateTests
         var userId = new UserId($"user-{Guid.NewGuid()}");
         var user = new UserAggregate(userId);
         var email = "test@example.com";
-        var displayName = "Test User";
+        var name = "Test User";
         var passwordHash = "hashed_password_123";
 
         // Act
-        user.Register(email, displayName, passwordHash);
+        user.Register(email, name, passwordHash);
 
         // Assert
         var uncommittedEvents = user.UncommittedEvents.ToList();
@@ -67,7 +67,7 @@ public class UserAggregateTests
 
         var evt = (UserRegisteredEvent)uncommittedEvents[0].AggregateEvent;
         Assert.AreEqual(email, evt.Email);
-        Assert.AreEqual(displayName, evt.DisplayName);
+        Assert.AreEqual(name, evt.Name);
         Assert.AreEqual(passwordHash, evt.PasswordHash);
         Assert.IsNotNull(evt.Roles);
         Assert.IsTrue(evt.Roles.Contains("Subscriber"));
@@ -80,15 +80,15 @@ public class UserAggregateTests
         var userId = new UserId($"user-{Guid.NewGuid()}");
         var user = new UserAggregate(userId);
         var email = "test@example.com";
-        var displayName = "Test User";
+        var name = "Test User";
         var passwordHash = "hashed_password_123";
 
         // Act
-        user.Register(email, displayName, passwordHash);
+        user.Register(email, name, passwordHash);
 
         // Assert
         Assert.AreEqual(email, user.Email);
-        Assert.AreEqual(displayName, user.DisplayName);
+        Assert.AreEqual(name, user.Name);
         Assert.AreEqual(passwordHash, user.PasswordHash);
         Assert.IsTrue(user.Roles.Contains("Subscriber"));
     }
@@ -107,7 +107,7 @@ public class UserAggregateTests
 
     [TestMethod]
     [ExpectedException(typeof(ArgumentException))]
-    public void Register_WithEmptyDisplayName_ThrowsArgumentException()
+    public void Register_WithEmptyName_ThrowsArgumentException()
     {
         // Arrange
         var userId = new UserId($"user-{Guid.NewGuid()}");
@@ -471,17 +471,17 @@ public class UserAggregateTests
     }
 
     [TestMethod]
-    public void UpdateInfo_WithDisplayName_EmitsUserInfoUpdatedEvent()
+    public void UpdateInfo_WithName_EmitsUserInfoUpdatedEvent()
     {
         // Arrange
         var userId = new UserId($"user-{Guid.NewGuid()}");
         var user = new UserAggregate(userId);
         user.Register("test@example.com", "Old Name", "hashed_password");
 
-        var newDisplayName = "New Name";
+        var newName = "New Name";
 
         // Act
-        user.UpdateInfo(null, newDisplayName);
+        user.UpdateInfo(null, newName);
 
         // Assert
         var uncommittedEvents = user.UncommittedEvents.Skip(1).ToList(); // Skip Register event
@@ -489,7 +489,7 @@ public class UserAggregateTests
         Assert.IsInstanceOfType(uncommittedEvents[0].AggregateEvent, typeof(UserInfoUpdatedEvent));
 
         var evt = (UserInfoUpdatedEvent)uncommittedEvents[0].AggregateEvent;
-        Assert.AreEqual(newDisplayName, evt.DisplayName);
+        Assert.AreEqual(newName, evt.Name);
     }
 
     [TestMethod]
@@ -501,14 +501,14 @@ public class UserAggregateTests
         user.Register("old@example.com", "Old Name", "hashed_password");
 
         var newEmail = "new@example.com";
-        var newDisplayName = "New Name";
+        var newName = "New Name";
 
         // Act
-        user.UpdateInfo(newEmail, newDisplayName);
+        user.UpdateInfo(newEmail, newName);
 
         // Assert
         Assert.AreEqual(newEmail, user.Email);
-        Assert.AreEqual(newDisplayName, user.DisplayName);
+        Assert.AreEqual(newName, user.Name);
     }
 
     [TestMethod]
@@ -727,7 +727,7 @@ public class UserAggregateTests
         // Act & Assert - Update Info
         user.UpdateInfo("newemail@example.com", "New Name");
         Assert.AreEqual("newemail@example.com", user.Email);
-        Assert.AreEqual("New Name", user.DisplayName);
+        Assert.AreEqual("New Name", user.Name);
 
 
         // Act & Assert - Deactivate

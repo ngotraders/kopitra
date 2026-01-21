@@ -36,7 +36,7 @@ public class UpdateUserInfoCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "old@example.com",
-            DisplayName = "Old Name",
+            Name = "Old Name",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -44,7 +44,7 @@ public class UpdateUserInfoCommandTests
         var command = new UpdateUserInfoCommand(userId)
         {
             Email = "new@example.com",
-            DisplayName = null
+            Name = null
         };
 
         // Act
@@ -56,18 +56,18 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("new@example.com", user.Email);
-        Assert.AreEqual("Old Name", user.DisplayName);
+        Assert.AreEqual("Old Name", user.Name);
     }
 
     [TestMethod]
-    public async Task UpdateUserInfo_WithDisplayName_UpdatesSuccessfully()
+    public async Task UpdateUserInfo_WithName_UpdatesSuccessfully()
     {
         // Arrange - Create user first
         var userId = UserId.New;
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "email@example.com",
-            DisplayName = "Old Display Name",
+            Name = "Old Name",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -75,7 +75,7 @@ public class UpdateUserInfoCommandTests
         var command = new UpdateUserInfoCommand(userId)
         {
             Email = null,
-            DisplayName = "New Display Name"
+            Name = "New Name"
         };
 
         // Act
@@ -87,7 +87,7 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("email@example.com", user.Email);
-        Assert.AreEqual("New Display Name", user.DisplayName);
+        Assert.AreEqual("New Name", user.Name);
     }
 
     [TestMethod]
@@ -98,7 +98,7 @@ public class UpdateUserInfoCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "before@example.com",
-            DisplayName = "Before",
+            Name = "Before",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -106,7 +106,7 @@ public class UpdateUserInfoCommandTests
         var command = new UpdateUserInfoCommand(userId)
         {
             Email = "after@example.com",
-            DisplayName = "After"
+            Name = "After"
         };
 
         // Act
@@ -118,7 +118,7 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("after@example.com", user.Email);
-        Assert.AreEqual("After", user.DisplayName);
+        Assert.AreEqual("After", user.Name);
     }
 
     [TestMethod]
@@ -129,7 +129,7 @@ public class UpdateUserInfoCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "nullupdate@example.com",
-            DisplayName = "Null Update",
+            Name = "Null Update",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -137,7 +137,7 @@ public class UpdateUserInfoCommandTests
         var command = new UpdateUserInfoCommand(userId)
         {
             Email = null,
-            DisplayName = null
+            Name = null
         };
 
         // Act & Assert
@@ -155,7 +155,7 @@ public class UpdateUserInfoCommandTests
         var registerCommand = new RegisterUserCommand(userId)
         {
             Email = "original@example.com",
-            DisplayName = "Test",
+            Name = "Test",
             PasswordHash = "hash"
         };
         await _commandBus.PublishAsync(registerCommand, CancellationToken.None);
@@ -163,7 +163,7 @@ public class UpdateUserInfoCommandTests
         var updateCommand = new UpdateUserInfoCommand(userId)
         {
             Email = "updated@example.com",
-            DisplayName = null
+            Name = null
         };
         await _commandBus.PublishAsync(updateCommand, CancellationToken.None);
 

@@ -16,7 +16,7 @@ public class RegisterUserCommandHandlerTests
         var cmd = new RegisterUserCommand(userId)
         {
             Email = "a@b.com",
-            DisplayName = "Alice",
+            Name = "Alice",
             PasswordHash = "hashedpwd"
         };
 

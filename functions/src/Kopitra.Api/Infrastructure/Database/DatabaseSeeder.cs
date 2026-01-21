@@ -54,7 +54,7 @@ public class DatabaseSeeder
             // Get admin credentials from configuration
             var adminEmail = _configuration["InitialAdmin:Email"] ?? "admin@kopitra.local";
             var adminPassword = _configuration["InitialAdmin:Password"] ?? "P@ssw0rd";
-            var adminDisplayName = _configuration["InitialAdmin:DisplayName"] ?? "System Administrator";
+            var adminName = _configuration["InitialAdmin:Name"] ?? "System Administrator";
 
             // Create initial admin user
             var adminUserId = UserId.New.Value;
@@ -64,7 +64,7 @@ public class DatabaseSeeder
             {
                 Id = adminUserId,
                 Email = adminEmail,
-                DisplayName = adminDisplayName,
+                Name = adminName,
                 PasswordHash = hashedPassword,
                 CanProvide = true,
                 CanSubscribe = true,

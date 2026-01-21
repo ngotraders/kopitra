@@ -14,13 +14,13 @@ export interface LoginResponse {
 export interface RegisterRequest {
   email: string;
   password: string;
-  displayName: string;
+  name: string;
 }
 
 export interface UserProfile {
   id: string;
   email: string;
-  displayName: string;
+  name: string;
   canProvide: boolean;
   canSubscribe: boolean;
   isActive: boolean;
@@ -31,7 +31,7 @@ export interface UserProfile {
 type UserApiResponse = {
   userId?: string;
   email?: string;
-  displayName?: string;
+  name?: string;
   canProvide: boolean;
   canSubscribe: boolean;
   isActive: boolean;
@@ -61,7 +61,7 @@ export const authApi = {
     return {
       id: res.userId ?? "",
       email: res.email ?? "",
-      displayName: res.displayName ?? "",
+      name: res.name ?? "",
       canProvide: res.canProvide,
       canSubscribe: res.canSubscribe,
       isActive: res.isActive,
