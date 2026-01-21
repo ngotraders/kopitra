@@ -19,8 +19,18 @@ public class GetAllUsersQueryHandler : IQueryHandler<GetAllUsersQuery, IEnumerab
     public async Task<IEnumerable<UserReadModel>> ExecuteQueryAsync(GetAllUsersQuery query, CancellationToken cancellationToken)
     {
         using var context = _contextProvider.CreateContext();
-        var users = await context.Users
-            .AsNoTracking()
+        var usersQuery = context.Users.AsNoTracking();
+
+        // Apply search filter if provided
+        if (!string.IsNullOrWhiteSpace(query.SearchTerm))
+        {
+            var searchLower = query.SearchTerm.ToLower();
+            usersQuery = usersQuery.Where(u =>
+                u.Email.ToLower().Contains(searchLower) ||
+                u.DisplayName.ToLower().Contains(searchLower));
+        }
+
+        var users = await usersQuery
             .OrderByDescending(u => u.RegisteredAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

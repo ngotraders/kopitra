@@ -15,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Kopitra.Api.Infrastructure.Database;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -62,6 +63,9 @@ builder.Services
     .AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>()
     .AddSingleton<ITokenService, JwtTokenService>()
     .AddSingleton<IHttpRequestDataAccessor, AsyncLocalHttpRequestDataAccessor>()
-    .AddSingleton<IMetadataProvider, EventFlowMetadataProvider>();
+    .AddSingleton<IMetadataProvider, EventFlowMetadataProvider>()
+    // Database initialization
+    .AddSingleton<DatabaseSeeder>()
+    .AddHostedService<DatabaseInitializer>();
 
 builder.Build().Run();

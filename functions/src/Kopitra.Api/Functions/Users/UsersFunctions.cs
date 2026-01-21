@@ -7,6 +7,7 @@ using Kopitra.Api.Common;
 using Kopitra.Api.Domain.ValueObjects;
 using Kopitra.Api.Functions.Users.Models;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Extensions.OpenApi.Extensions;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
@@ -108,6 +109,7 @@ public class UsersFunctions
     [Function("GetAllUsers")]
     [OpenApiOperation("GetAllUsers", new[] { "Users" }, Summary = "Get all users (admin only)")]
     [OpenApiSecurity("BearerAuth", SecuritySchemeType.Http, Scheme = OpenApiSecuritySchemeType.Bearer, BearerFormat = "JWT")]
+    [OpenApiParameter("search", In = ParameterLocation.Query, Required = false, Type = typeof(string), Description = "Search term to filter users by email or display name")]
     [OpenApiResponseWithoutBody(HttpStatusCode.Unauthorized, Description = "Unauthorized")]
     [OpenApiResponseWithoutBody(HttpStatusCode.Forbidden, Description = "Forbidden")]
     [OpenApiResponseWithBody(HttpStatusCode.BadRequest, "application/json", typeof(ApiResponse), Description = "Bad request")]
@@ -131,7 +133,9 @@ public class UsersFunctions
                 return forbiddenResponse;
             }
 
-            var query = new GetAllUsersQuery();
+            // Get search parameter from query string
+            var searchTerm = req.Query("search");
+            var query = new GetAllUsersQuery(searchTerm);
             var users = await _queryProcessor.ProcessAsync(query, CancellationToken.None);
 
             var usersResponse = users.Select(u => new UserResponse
