@@ -118,8 +118,8 @@ export const AdminAccountRegistrationForm: React.FC<AccountRegistrationFormProps
       if (onSuccess) {
         onSuccess(response.id);
       }
-    } catch (err: any) {
-      const errorMessage = err.message || "アカウント作成に失敗しました";
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "アカウント作成に失敗しました";
       setError(errorMessage);
       if (onError) {
         onError(errorMessage);
@@ -183,8 +183,9 @@ export const AdminAccountRegistrationForm: React.FC<AccountRegistrationFormProps
 
               <Grid>
                 <FormControl fullWidth disabled={isLoading}>
-                  <InputLabel>ブローカー</InputLabel>
+                  <InputLabel id="broker-label">ブローカー</InputLabel>
                   <Select
+                    labelId="broker-label"
                     value={formData.broker}
                     label="ブローカー"
                     onChange={(e) => handleInputChange("broker", e.target.value)}
@@ -212,8 +213,9 @@ export const AdminAccountRegistrationForm: React.FC<AccountRegistrationFormProps
 
               <Grid>
                 <FormControl fullWidth disabled={isLoading}>
-                  <InputLabel>ステータス</InputLabel>
+                  <InputLabel id="status-label">ステータス</InputLabel>
                   <Select
+                    labelId="status-label"
                     value={formData.status}
                     label="ステータス"
                     onChange={(e) => handleInputChange("status", e.target.value)}

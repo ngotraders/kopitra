@@ -1,6 +1,6 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { LoginForm } from "./LoginForm";
-import { AuthProvider } from "../hooks/useAuth";
+import { AuthProvider } from "../../../providers/AuthProvider";
 import { BrowserRouter } from "react-router-dom";
 
 const meta = {

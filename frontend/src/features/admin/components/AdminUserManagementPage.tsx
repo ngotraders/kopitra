@@ -52,8 +52,9 @@ export const AdminUserManagementPage: React.FC<AdminUserManagementPageProps> = (
       const res = await userManagementApi.listUsers(page + 1, pageSize, search.trim() || undefined);
       setUsers(res.users);
       setTotal(res.total);
-    } catch (err: any) {
-      setError(err?.message || "ユーザー取得に失敗しました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "ユーザー取得に失敗しました";
+      setError(message);
       setUsers([]);
       setTotal(0);
     } finally {

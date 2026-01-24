@@ -1,7 +1,8 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
-import { AuthProvider, useAuth, LoginForm } from "./features/auth";
+import { AuthProvider } from "./providers/AuthProvider";
+import { useAuth, LoginForm } from "./features/auth";
 import { Layout, ProtectedRoute } from "./components";
 import { Dashboard, AdminUsers, AdminUserDetailPage } from "./routes";
 import { AdminUserNewDialog } from "./features/admin";

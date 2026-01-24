@@ -1,15 +1,40 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { expect, userEvent, within, waitFor } from "storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within, waitFor, screen } from "storybook/test";
+import React, { useRef } from "react";
+import { Button, Box } from "@mui/material";
 
 import { AdminUserRegistrationForm } from "./AdminUserRegistrationForm";
 
+// ストーリー用のラッパーコンポーネント（ボタン付き）
+const FormWithButton: React.FC = () => {
+  const formRef = useRef<{ submit: () => Promise<void> }>(null);
+
+  const handleSubmit = async () => {
+    await formRef.current?.submit();
+  };
+
+  return (
+    <Box>
+      <AdminUserRegistrationForm ref={formRef} />
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleSubmit}
+        sx={{ mt: 2 }}
+      >
+        ユーザーを作成
+      </Button>
+    </Box>
+  );
+};
+
 const meta = {
   title: "Features/Admin/AdminUserRegistrationForm",
-  component: AdminUserRegistrationForm,
+  component: FormWithButton,
   parameters: {
     layout: "padded",
   },
-} satisfies Meta<typeof AdminUserRegistrationForm>;
+} satisfies Meta<typeof FormWithButton>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -33,7 +58,9 @@ export const FillForm: Story = {
     // 権限選択
     const roleSelect = canvas.getByLabelText(/権限/i);
     await userEvent.click(roleSelect);
-    const adminOption = canvas.getByRole("option", { name: /管理者/i });
+    
+    // メニューが開いてoptionが表示されるのを待つ（ポータル経由なのでscreenで探す）
+    const adminOption = await screen.findByRole("option", { name: /管理者/i });
     await userEvent.click(adminOption);
 
     // 入力値を確認

@@ -46,8 +46,9 @@ export const AdminUserDetailPage: React.FC<AdminUserDetailPageProps> = ({ userId
       try {
         const userData = await userManagementApi.getUser(userId);
         setUser(userData);
-      } catch (err: any) {
-        setError(err?.message || "ユーザー情報の取得に失敗しました");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "ユーザー情報の取得に失敗しました";
+        setError(message);
       } finally {
         setIsLoading(false);
       }
@@ -60,8 +61,9 @@ export const AdminUserDetailPage: React.FC<AdminUserDetailPageProps> = ({ userId
     try {
       await userManagementApi.deleteUser(userId);
       onBack();
-    } catch (err: any) {
-      setError(err?.message || "ユーザーの削除に失敗しました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "ユーザーの削除に失敗しました";
+      setError(message);
     } finally {
       setShowDeleteConfirm(false);
     }

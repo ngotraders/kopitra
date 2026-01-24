@@ -3,37 +3,39 @@ export interface ApiError {
   status: number;
 }
 
+export interface TokenRefreshCallback {
+  (): Promise<string | null>;
+}
+
 export class ApiClient {
   private baseUrl: string;
-  private token: string | null = null;
+  private getToken: () => string | null;
+  private refreshToken: TokenRefreshCallback | null = null;
+  private isRefreshing = false;
+  private refreshPromise: Promise<string | null> | null = null;
 
-  constructor(baseUrl: string = "/api") {
+  constructor(
+    baseUrl: string = "/api",
+    getToken: () => string | null = () => localStorage.getItem("authToken")
+  ) {
     this.baseUrl = baseUrl;
-    this.loadToken();
+    this.getToken = getToken;
   }
 
-  private loadToken(): void {
-    this.token = localStorage.getItem("authToken");
+  setTokenRefreshCallback(callback: TokenRefreshCallback): void {
+    this.refreshToken = callback;
   }
 
-  setToken(token: string | null): void {
-    this.token = token;
-    if (token) {
-      localStorage.setItem("authToken", token);
-    } else {
-      localStorage.removeItem("authToken");
-    }
-  }
-
-  getToken(): string | null {
-    return this.token;
-  }
-
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const headers: HeadersInit = this.token
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    isRetry: boolean = false
+  ): Promise<T> {
+    const token = this.getToken();
+    const headers: HeadersInit = token
       ? {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${token}`,
           ...options.headers,
         }
       : {
@@ -45,6 +47,29 @@ export class ApiClient {
       ...options,
       headers,
     });
+
+    // 401エラーの場合、トークンリフレッシュを試みる
+    if (response.status === 401 && !isRetry && this.refreshToken) {
+      // 既にリフレッシュ中の場合は、そのPromiseを待つ
+      if (this.isRefreshing && this.refreshPromise) {
+        await this.refreshPromise;
+      } else {
+        // トークンリフレッシュを開始
+        this.isRefreshing = true;
+        this.refreshPromise = this.refreshToken();
+
+        try {
+          const newToken = await this.refreshPromise;
+          if (newToken) {
+            // リフレッシュ成功、元のリクエストをリトライ
+            return this.request<T>(endpoint, options, true);
+          }
+        } finally {
+          this.isRefreshing = false;
+          this.refreshPromise = null;
+        }
+      }
+    }
 
     if (!response.ok) {
       const error: ApiError = {

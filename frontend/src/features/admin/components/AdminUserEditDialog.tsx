@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import type { TransitionProps } from "@mui/material/transitions";
 import {
   Dialog,
   DialogTitle,
@@ -14,7 +15,10 @@ import {
 } from "@mui/material";
 import { type AdminUser, type AdminUserUpdateRequest, userManagementApi } from "../../../api";
 
-const Transition = React.forwardRef(function Transition(props: any, ref: React.Ref<any>) {
+const Transition = React.forwardRef(function Transition(
+  props: TransitionProps & { children: React.ReactElement },
+  ref: React.Ref<unknown>
+) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
@@ -79,8 +83,9 @@ export const AdminUserEditDialog: React.FC<AdminUserEditDialogProps> = ({
       await userManagementApi.updateUser(user.id, updateData);
       onSuccess();
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || "ユーザーの更新に失敗しました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "ユーザーの更新に失敗しました";
+      setError(message);
     } finally {
       setIsLoading(false);
     }

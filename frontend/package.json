@@ -9,6 +9,10 @@
     "format": "prettier --write .",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:unit": "vitest run --project=unit",
+    "test:storybook": "vitest run --project=storybook",
+    "test:all": "vitest --project=unit",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
@@ -18,6 +22,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.7",
     "@mui/material": "^7.3.7",
+    "@tanstack/react-query": "^5.90.20",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0"

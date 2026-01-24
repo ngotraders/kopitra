@@ -84,8 +84,8 @@ export const AdminUserRegistrationForm = React.forwardRef<
       if (onSuccess) {
         onSuccess(response.id);
       }
-    } catch (err: any) {
-      const errorMessage = err.message || "ユーザー作成に失敗しました";
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "ユーザー作成に失敗しました";
       setError(errorMessage);
       if (onError) {
         onError(errorMessage);
@@ -151,7 +151,7 @@ export const AdminUserRegistrationForm = React.forwardRef<
 
       <TextField
         fullWidth
-        label="表示名"
+        label="名前"
         value={formData.name}
         onChange={(e) => handleInputChange("name", e.target.value)}
         placeholder="山田太郎"
@@ -161,8 +161,9 @@ export const AdminUserRegistrationForm = React.forwardRef<
       />
 
       <FormControl fullWidth disabled={isLoading} size="small">
-        <InputLabel>権限</InputLabel>
+        <InputLabel id="role-label">権限</InputLabel>
         <Select
+          labelId="role-label"
           value={formData.role}
           label="権限"
           onChange={(e) => handleInputChange("role", e.target.value)}

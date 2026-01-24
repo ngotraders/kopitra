@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { expect, userEvent, within, waitFor } from "storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within, waitFor, screen } from "storybook/test";
 
 import { AdminAccountRegistrationForm } from "./AdminAccountRegistrationForm";
 
@@ -35,7 +35,9 @@ export const FillForm: Story = {
     // ブローカー選択
     const brokerSelect = canvas.getByLabelText(/ブローカー/i);
     await userEvent.click(brokerSelect);
-    const brokerOption = canvas.getByRole("option", { name: /XM Trading/i });
+    
+    // メニューが開いてoptionが表示されるのを待つ（ポータル経由なのでscreenで探す）
+    const brokerOption = await screen.findByRole("option", { name: /XM Trading/i });
     await userEvent.click(brokerOption);
 
     // アカウント番号入力
@@ -62,7 +64,9 @@ export const SubmitForm: Story = {
 
     const brokerSelect = canvas.getByLabelText(/ブローカー/i);
     await userEvent.click(brokerSelect);
-    const brokerOption = canvas.getByRole("option", { name: /Axiory/i });
+    
+    // メニューが開いてoptionが表示されるのを待つ（ポータル経由なのでscreenで探す）
+    const brokerOption = await screen.findByRole("option", { name: /Axiory/i });
     await userEvent.click(brokerOption);
 
     const accountNumberInput = canvas.getByLabelText(/アカウント番号/i);

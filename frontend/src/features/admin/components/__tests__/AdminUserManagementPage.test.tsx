@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { vi, describe, it, afterEach, expect, skip } from "vitest";
+import { vi, describe, it, afterEach, expect } from "vitest";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { AdminUserManagementPage } from "../AdminUserManagementPage";
 

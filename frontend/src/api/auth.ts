@@ -43,7 +43,10 @@ export const authApi = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/auth/login", credentials);
     if (response.accessToken) {
-      apiClient.setToken(response.accessToken);
+      localStorage.setItem("authToken", response.accessToken);
+      if (response.refreshToken) {
+        localStorage.setItem("refreshToken", response.refreshToken);
+      }
     }
     return response;
   },
@@ -51,9 +54,41 @@ export const authApi = {
   async register(data: RegisterRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/auth/register", data);
     if (response.accessToken) {
-      apiClient.setToken(response.accessToken);
+      localStorage.setItem("authToken", response.accessToken);
+      if (response.refreshToken) {
+        localStorage.setItem("refreshToken", response.refreshToken);
+      }
     }
     return response;
+  },
+
+  async refreshToken(): Promise<string | null> {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (!refreshToken) {
+        return null;
+      }
+
+      const response = await apiClient.post<LoginResponse>("/auth/refresh", {
+        refreshToken,
+      });
+
+      if (response.accessToken) {
+        localStorage.setItem("authToken", response.accessToken);
+        if (response.refreshToken) {
+          localStorage.setItem("refreshToken", response.refreshToken);
+        }
+        return response.accessToken;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      // リフレッシュ失敗時はトークンをクリア
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("refreshToken");
+      return null;
+    }
   },
 
   async getCurrentUser(): Promise<UserProfile> {
@@ -71,6 +106,7 @@ export const authApi = {
   },
 
   logout(): void {
-    apiClient.setToken(null);
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("refreshToken");
   },
 };

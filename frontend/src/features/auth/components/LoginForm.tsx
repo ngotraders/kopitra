@@ -45,8 +45,9 @@ export const LoginForm: React.FC = () => {
     setError("");
     try {
       await login(email, password);
-    } catch (err: any) {
-      setError(err.message || "ログインに失敗しました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "ログインに失敗しました";
+      setError(message);
     }
   };
 
@@ -55,8 +56,9 @@ export const LoginForm: React.FC = () => {
     setError("");
     try {
       await register(email, password, name);
-    } catch (err: any) {
-      setError(err.message || "登録に失敗しました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "登録に失敗しました";
+      setError(message);
     }
   };
 
