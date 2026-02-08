@@ -124,7 +124,7 @@ dotnet build
 
 ```bash
 # プロジェクトのルートディレクトリに移動
-cd /path/to/kopitra2
+cd /path/to/kopitra
 
 # Docker ComposeでSQL Serverを起動
 docker-compose up -d mssql
@@ -328,7 +328,7 @@ dotnet ef database update \
 
 ```bash
 # 1. Docker Compose で SQL Server を起動
-cd /path/to/kopitra2
+cd /path/to/kopitra
 docker-compose up -d mssql
 
 # 2. マイグレーションを実行
@@ -337,7 +337,7 @@ dotnet ef database update \
   --connection "Server=localhost,1433;Database=kopitra_dev;User Id=sa;Password=KopitraPassword123;"
 
 # 3. Azure Functions Core Tools を使用して実行
-cd /path/to/kopitra2/functions
+cd /path/to/kopitra/functions
 func start
 
 # または Azure Functions がバックグラウンドで実行されている場合：

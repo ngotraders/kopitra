@@ -84,7 +84,7 @@ Polling Flow:
 ## 📂 Project Structure
 
 ```
-kopitra2/
+kopitra/
 ├── AGENTS.md                          # This file - overall AI agent guidelines
 ├── docs/
 │   └── SYSTEM_DESIGN.md               # Complete system specification (Japanese)
