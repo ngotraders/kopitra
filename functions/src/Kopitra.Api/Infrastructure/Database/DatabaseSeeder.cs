@@ -64,7 +64,7 @@ public class DatabaseSeeder
             {
                 Id = adminUserId,
                 Email = adminEmail,
-                Name = adminName,
+                UserName = adminName,
                 PasswordHash = hashedPassword,
                 CanProvide = true,
                 CanSubscribe = true,

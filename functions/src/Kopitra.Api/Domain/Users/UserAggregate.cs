@@ -10,7 +10,7 @@ namespace Kopitra.Api.Domain.Users;
 public class UserAggregate : AggregateRoot<UserAggregate, UserId>
 {
     public string Email { get; private set; } = null!;
-    public string Name { get; private set; } = null!;
+    public string UserName { get; private set; } = null!;
     public string PasswordHash { get; private set; } = null!;
     public string[] Roles { get; private set; } = Array.Empty<string>();
     public bool IsProviderEnabled { get; private set; } = false;
@@ -24,19 +24,19 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     /// <summary>
     /// Register new user
     /// </summary>
-    public void Register(string email, string name, string passwordHash)
+    public void Register(string email, string userName, string passwordHash)
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new ArgumentException("Email is required.", nameof(email));
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Name is required.", nameof(name));
+        if (string.IsNullOrWhiteSpace(userName))
+            throw new ArgumentException("Name is required.", nameof(userName));
         if (string.IsNullOrWhiteSpace(passwordHash))
             throw new ArgumentException("Password hash is required.", nameof(passwordHash));
 
         Emit(new UserRegisteredEvent()
         {
             Email = email,
-            Name = name,
+            UserName = userName,
             PasswordHash = passwordHash,
             Roles = ["Subscriber"],
         });
@@ -145,15 +145,15 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     /// <summary>
     /// Update user information (email, display name)
     /// </summary>
-    public void UpdateInfo(string? email, string? name)
+    public void UpdateInfo(string? email, string? userName)
     {
-        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(userName))
             throw new ArgumentException("At least one field must be provided.");
 
         Emit(new UserInfoUpdatedEvent
         {
             Email = email,
-            Name = name,
+            UserName = userName,
         });
     }
 
@@ -206,7 +206,7 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     public void Apply(UserRegisteredEvent domainEvent)
     {
         Email = domainEvent.Email;
-        Name = domainEvent.Name;
+        UserName = domainEvent.UserName;
         PasswordHash = domainEvent.PasswordHash;
         Roles = domainEvent.Roles;
     }
@@ -246,8 +246,8 @@ public class UserAggregate : AggregateRoot<UserAggregate, UserId>
     {
         if (!string.IsNullOrWhiteSpace(domainEvent.Email))
             Email = domainEvent.Email;
-        if (!string.IsNullOrWhiteSpace(domainEvent.Name))
-            Name = domainEvent.Name;
+        if (!string.IsNullOrWhiteSpace(domainEvent.UserName))
+            UserName = domainEvent.UserName;
     }
 
     public void Apply(UserPermissionsChangedEvent domainEvent)

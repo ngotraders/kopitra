@@ -27,7 +27,7 @@ public class GetAllUsersQueryHandler : IQueryHandler<GetAllUsersQuery, IEnumerab
             var searchLower = query.SearchTerm.ToLower();
             usersQuery = usersQuery.Where(u =>
                 u.Email.ToLower().Contains(searchLower) ||
-                u.Name.ToLower().Contains(searchLower));
+                u.UserName.ToLower().Contains(searchLower));
         }
 
         var users = await usersQuery

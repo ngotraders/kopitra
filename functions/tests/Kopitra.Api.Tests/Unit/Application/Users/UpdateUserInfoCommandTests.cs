@@ -56,7 +56,7 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("new@example.com", user.Email);
-        Assert.AreEqual("Old Name", user.Name);
+        Assert.AreEqual("Old Name", user.UserName);
     }
 
     [TestMethod]
@@ -87,7 +87,7 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("email@example.com", user.Email);
-        Assert.AreEqual("New Name", user.Name);
+        Assert.AreEqual("New Name", user.UserName);
     }
 
     [TestMethod]
@@ -118,7 +118,7 @@ public class UpdateUserInfoCommandTests
 
         Assert.IsNotNull(user);
         Assert.AreEqual("after@example.com", user.Email);
-        Assert.AreEqual("After", user.Name);
+        Assert.AreEqual("After", user.UserName);
     }
 
     [TestMethod]

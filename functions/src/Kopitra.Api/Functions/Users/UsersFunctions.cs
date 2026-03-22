@@ -79,7 +79,7 @@ public class UsersFunctions
             {
                 UserId = user.Id,
                 Email = user.Email,
-                Name = user.Name,
+                Name = user.UserName,
                 CanProvide = user.CanProvide,
                 CanSubscribe = user.CanSubscribe,
                 IsActive = user.IsActive,
@@ -142,7 +142,7 @@ public class UsersFunctions
             {
                 UserId = u.Id,
                 Email = u.Email,
-                Name = u.Name,
+                Name = u.UserName,
                 CanProvide = u.CanProvide,
                 CanSubscribe = u.CanSubscribe,
                 IsActive = u.IsActive,
@@ -205,7 +205,7 @@ public class UsersFunctions
             {
                 UserId = user.Id,
                 Email = user.Email,
-                Name = user.Name,
+                Name = user.UserName,
                 CanProvide = user.CanProvide,
                 CanSubscribe = user.CanSubscribe,
                 IsActive = user.IsActive,

@@ -50,7 +50,7 @@ public class RegisterUserCommandTests
         Assert.IsNotNull(user);
         Assert.AreEqual(userId.Value, user.Id);
         Assert.AreEqual("test@example.com", user.Email);
-        Assert.AreEqual("Test User", user.Name);
+        Assert.AreEqual("Test User", user.UserName);
         Assert.AreEqual("hashed_password_123", user.PasswordHash);
         Assert.IsTrue(user.IsActive);
         Assert.IsTrue(user.Roles.Contains("Subscriber"));
